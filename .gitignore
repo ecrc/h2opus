@@ -1,0 +1,13 @@
+obj/*
+lib/*
+*.eps
+*~
+make.inc
+include/h2opusconf.h
+examples/hara/test_hara
+examples/hgemv/test_hgemv
+examples/fractional_diffusion/fractional_diffusion
+examples/hcompress/test_hcompress
+examples/hlru_global/test_hlru_global
+examples/hlru_local/test_hlru_local
+examples/horthog/test_horthog

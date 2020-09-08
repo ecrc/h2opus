@@ -1,0 +1,43 @@
+# This is an example configuration for CPU backend (default)
+
+# use single precision (default is double precision)
+H2OPUS_USE_SINGLE_PRECISION=1
+
+# detect if MKL is available
+ifneq ($(MKLROOT),)
+  H2OPUS_USE_MKL=1
+else
+  ifdef H2OPUS_USE_MKL
+    undefine H2OPUS_USE_MKL
+  endif
+endif
+
+# C++ compiler
+CXX ?= g++
+
+# Compiler flags (tested with both GNU and Intel)
+CXXFLAGS = -fopenmp -m64 -O3 -std=c++11 -pthread -DH2OPUS_PROFILING_ENABLED
+
+# Linker flags
+LDFLAGS = -ldl -lpthread -lm -fopenmp
+
+# cblas headers and linking line
+ifneq ($(MKLROOT),)
+  H2OPUS_CBLAS_INCDIR = $(MKLROOT)/include
+  #alternatively, we can use CXXCPPFLAGS
+  #CXXCPPFLAGS += -I/$(MKLROOT)/include
+  H2OPUS_CBLAS_LIBS = -Wl,-rpath,$(MKLROOT)/lib/intel64 -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+else
+  # this example file uses openblas
+  # but you can use your favorite BLAS/LAPACK distro
+  # as long as it provides the C interface via cblas.h and lapacke.h
+  H2OPUS_CBLAS_INCDIR = $(OPENBLAS_DIR)/include
+  H2OPUS_CBLAS_LIBS = -Wl,-rpath,$(OPENBLAS_DIR)/lib -L$(OPENBLAS_DIR)/lib -lopenblas
+endif
+
+# for CPU only builds, we need thrust
+ifneq ($(THRUST_DIR),)
+  H2OPUS_THRUST_INCDIR = $(THRUST_DIR)/include
+  #alternatively, we can use CXXCPPFLAGS
+  #CXXCPPFLAGS += $(THRUST_DIR)/include
+endif

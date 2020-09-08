@@ -1,0 +1,177 @@
+#include <stdio.h>
+#include <h2opus.h>
+
+#include "../common/example_problem.h"
+#include "../common/example_util.h"
+#include <h2opus/util/boxentrygen.h>
+
+template <int hw> class ReconstructSampler : public HMatrixSampler
+{
+  private:
+    THMatrix<hw> *hmatrix;
+    h2opusHandle_t h2opus_handle;
+
+  public:
+    ReconstructSampler(THMatrix<hw> &hmatrix, h2opusHandle_t h2opus_handle)
+    {
+        this->hmatrix = &hmatrix;
+        this->h2opus_handle = h2opus_handle;
+    }
+
+    void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
+    {
+        hgemv(H2Opus_NoTrans, 1, *hmatrix, input, hmatrix->n, 0, output, hmatrix->n, samples, h2opus_handle);
+    }
+};
+
+template <int hw> class SquareSampler : public HMatrixSampler
+{
+    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
+
+  private:
+    THMatrix<hw> *hmatrix;
+    h2opusHandle_t h2opus_handle;
+
+    RealVector temp_product;
+
+  public:
+    SquareSampler(THMatrix<hw> &hmatrix, h2opusHandle_t h2opus_handle)
+    {
+        this->hmatrix = &hmatrix;
+        this->h2opus_handle = h2opus_handle;
+    }
+
+    void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
+    {
+        if (temp_product.size() < samples * hmatrix->n)
+            resizeThrustArray(temp_product, samples * hmatrix->n);
+
+        hgemv(H2Opus_NoTrans, 1, *hmatrix, input, hmatrix->n, 0, vec_ptr(temp_product), hmatrix->n, samples,
+              h2opus_handle);
+        hgemv(H2Opus_NoTrans, 1, *hmatrix, vec_ptr(temp_product), hmatrix->n, 0, output, hmatrix->n, samples,
+              h2opus_handle);
+    }
+};
+
+template <int hw>
+void test_construction(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_samples, H2Opus_Real trunc_eps,
+                       const char *label, h2opusHandle_t h2opus_handle)
+{
+    int n = hmatrix.n;
+    H2Opus_Real approx_norm = sampler_norm<H2Opus_Real, hw>(sampler, n, 10, h2opus_handle);
+    H2Opus_Real abs_trunc_tol = trunc_eps * approx_norm;
+    printf("%s approximate norm = %e, abs_tol = %e\n", label, approx_norm, abs_trunc_tol);
+
+    hara(sampler, hmatrix, max_samples, 10, abs_trunc_tol, 32, h2opus_handle);
+    H2Opus_Real approx_construnction_error =
+        sampler_difference<H2Opus_Real, hw>(sampler, hmatrix, 40, h2opus_handle) / approx_norm;
+    printf("%s %s construction error = %e\n", (hw == H2OPUS_HWTYPE_CPU ? "CPU" : "GPU"), label,
+           approx_construnction_error);
+}
+
+int main(int argc, char **argv)
+{
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Argument parsing
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    H2OpusArgParser arg_parser;
+    arg_parser.setArgs(argc, argv);
+
+    int grid_x = arg_parser.option<int>("gx", "grid_x", "Grid points in the X direction", 32);
+    int grid_y = arg_parser.option<int>("gy", "grid_y", "Grid points in the Y direction", 32);
+    int grid_z = arg_parser.option<int>("gz", "grid_z", "Grid points in the Z direction", 1);
+    int leaf_size = arg_parser.option<int>("m", "leaf_size", "Leaf size in the KD-tree", 64);
+    int cheb_grid_pts = arg_parser.option<int>(
+        "k", "cheb_grid_pts", "Number of grid points in each dimension for Chebyshev interpolation (rank = k^d)", 8);
+    int max_samples =
+        arg_parser.option<int>("s", "max_samples", "Max number of samples to take for each level of the h2opus", 128);
+    H2Opus_Real eta = arg_parser.option<H2Opus_Real>("e", "eta", "Admissibility parameter eta", DEFAULT_ETA);
+    H2Opus_Real trunc_eps = arg_parser.option<H2Opus_Real>(
+        "te", "trunc_eps", "Relative truncation error threshold for the construction", 1e-4);
+    bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
+    bool print_help = arg_parser.flag("h", "help", "This message", false);
+
+    if (!arg_parser.valid() || print_help)
+    {
+        arg_parser.printUsage();
+        exit(0);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Geometry generation
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    size_t n = grid_x * grid_y * grid_z;
+    printf("N = %d\n", (int)n);
+    // Create point cloud
+    int dim = (grid_z == 1 ? 2 : 3);
+    PointCloud<H2Opus_Real> pt_cloud(dim, n);
+    if (grid_z > 1)
+        generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
+    else
+        generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Matrix construction
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setup hmatrix construction parameters:
+    // Create a functor that can generate the matrix entries from two points
+    FunctionGen<H2Opus_Real> func_gen(dim);
+    // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
+    BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
+
+    // Create the admissibility condition using the eta parameter
+    // Decreasing eta refines the matrix tree and increasing it coarsens the tree
+    H2OpusBoxCenterAdmissibility admissibility(eta);
+
+    // Build the hmatrix. Currently only symmetric matrices are fully supported
+    HMatrix hmatrix(n, true), constructed_hmatrix(n, true);
+    buildHMatrix(hmatrix, &pt_cloud, admissibility, entry_gen, leaf_size, cheb_grid_pts);
+    buildHMatrixStructure(constructed_hmatrix, &pt_cloud, leaf_size, admissibility);
+    HMatrix zero_hmatrix = constructed_hmatrix;
+
+    if (output_eps)
+        outputEps(hmatrix, "structure.eps");
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // H2OPUS
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Create h2opus handle
+    h2opusHandle_t h2opus_handle;
+    h2opusCreateHandle(&h2opus_handle);
+
+    // Reconstuct the matrix and its square
+    ReconstructSampler<H2OPUS_HWTYPE_CPU> cpu_reconstruct_sampler(hmatrix, h2opus_handle);
+    SquareSampler<H2OPUS_HWTYPE_CPU> cpu_square_sampler(hmatrix, h2opus_handle);
+
+    // Reconstruction
+    test_construction<H2OPUS_HWTYPE_CPU>(&cpu_reconstruct_sampler, constructed_hmatrix, max_samples, trunc_eps,
+                                         "Matrix", h2opus_handle);
+
+    // Clear out matrix data
+    constructed_hmatrix = zero_hmatrix;
+
+    // Squaring
+    test_construction<H2OPUS_HWTYPE_CPU>(&cpu_square_sampler, constructed_hmatrix, max_samples, trunc_eps, "Square",
+                                         h2opus_handle);
+
+#ifdef H2OPUS_USE_GPU
+    HMatrix_GPU gpu_hmatrix = hmatrix, gpu_constructed_hmatrix = zero_hmatrix;
+    ReconstructSampler<H2OPUS_HWTYPE_GPU> gpu_reconstruct_sampler(gpu_hmatrix, h2opus_handle);
+    SquareSampler<H2OPUS_HWTYPE_GPU> gpu_square_sampler(gpu_hmatrix, h2opus_handle);
+
+    // Reconstruction
+    test_construction<H2OPUS_HWTYPE_GPU>(&gpu_reconstruct_sampler, gpu_constructed_hmatrix, max_samples, trunc_eps,
+                                         "Matrix", h2opus_handle);
+
+    // Clear out matrix data
+    gpu_constructed_hmatrix = zero_hmatrix;
+
+    // Squaring
+    test_construction<H2OPUS_HWTYPE_GPU>(&gpu_square_sampler, gpu_constructed_hmatrix, max_samples, trunc_eps, "Square",
+                                         h2opus_handle);
+#endif
+
+    h2opusDestroyHandle(h2opus_handle);
+
+    return 0;
+}

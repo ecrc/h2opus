@@ -1,0 +1,38 @@
+For NVIDIA-GPU installation:
+----------------------------
+
+The current release has been tested with CUDA versions from 9.0 to 10.2.
+CUDA version 11 introduces some changes and may not work directly out of the box without some changes.
+
+1. H2Opus on GPUs has two external dependencies, MAGMA and KBLAS, which should be installed.
+    * git clone  https://bitbucket.org/icl/magma.git
+      to download MAGMA and follow its installation instructions.
+    * git clone https://github.com/ecrc/kblas-gpu.git
+      to download KBLAS and follow its installation instructions and provide a path to the CUB library
+    * git clone  https://github.com/NVlabs/cub.git
+      to download CUB. CUB is a header-only library and no particular installation is necessary.
+
+2. Install the H2Opus library.
+    * create a make.inc file to customize the build of the library. Edit it to specify whether a GPU is available (H2OPUS_USE_GPU=1), whether to use MKL (H2OPUS_USE_MKL=1), and whether to use single precision (H2OPUS_USE_SINGLE_PRECISION=1, default is double precision). The file should also be edited to specify the install paths of the dependencies above and the compute capabilities of the target GPU.
+    * examples can be found in make.inc.cpu (CPU build) or make.inc.gpu (CPU-GPU build). These files have been tested with GNU and Intel.
+    * type 'make' to configure, compile and build the library
+    * type 'make check' to verify a correct build and compile all the examples
+    * type 'make distclean' before trying a different configuration
+
+3. Test one of the examples.
+    * go to the examples/ directory
+    * go to the hgemv/ folder example
+    * type 'make' to build this example.
+    * run it with './test_hgemv --help' to see the options that can be set. The README.md file in this folder has a high-level explanation of the code.
+
+
+
+For CPU-only installation:
+--------------------------
+
+1. Install the Thrust library
+      * git clone https://github.com/thrust/thrust.git
+        Thrust is a header only library and no particular installation is necessary.
+
+After installing Thrust, follow steps 2 and 3 above.
+
