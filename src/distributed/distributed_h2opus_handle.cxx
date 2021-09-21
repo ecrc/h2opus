@@ -107,16 +107,9 @@ void h2opusCreateDistributedHandleComm(distributedH2OpusHandle_t *h2opus_handle,
         int localrank = 0;
         if (select_local_rank)
         {
-            MPI_Comm local_comm;
-            mpiErrchk(
-                MPI_Comm_split_type(dist_h2opus_handle->comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &local_comm));
-
-            mpiErrchk(MPI_Comm_rank(local_comm, &localrank));
-            mpiErrchk(MPI_Comm_free(&local_comm));
-
             int devCount = 0;
             gpuErrchk(cudaGetDeviceCount(&devCount));
-            gpuErrchk(cudaSetDevice(localrank % devCount));
+            gpuErrchk(cudaSetDevice(dist_h2opus_handle->rank % devCount));
         }
         gpuErrchk(cudaGetDevice(&dist_h2opus_handle->local_rank));
         if (select_local_rank)
@@ -124,7 +117,7 @@ void h2opusCreateDistributedHandleComm(distributedH2OpusHandle_t *h2opus_handle,
             cudaDeviceProp prop;
             gpuErrchk(cudaGetDeviceProperties(&prop, dist_h2opus_handle->local_rank));
 
-            printf("Local Rank %2d Pid %6d on %10s device %2d [0x%02x] %s\n", localrank, getpid(), hostname,
+            printf("H2OPUS: Local Rank %2d Pid %6d on %10s device %2d [0x%02x] %s\n", localrank, getpid(), hostname,
                    dist_h2opus_handle->local_rank, prop.pciBusID, prop.name);
         }
     }
