@@ -1,13 +1,18 @@
 #ifndef __H2OPUS_BATCH_WRAPPERS_GPU__
 #define __H2OPUS_BATCH_WRAPPERS_GPU__
 
+#include <h2opusconf.h>
+
 #ifdef H2OPUS_USE_GPU
 
+#include <h2opus/util/blas_wrappers.h>
 #include <h2opus/util/batch_block_set.h>
 #include <h2opus/util/batch_matrix_add.h>
 #include <h2opus/util/debug_routines.h>
 #include <h2opus/util/gemv_batch.h>
+#include <h2opus/util/batch_potrf_rd.h>
 
+#include <kblas_defs.h>
 #include <batch_ara.h>
 #include <batch_block_copy.h>
 #include <batch_geqp.h>
@@ -48,9 +53,9 @@ inline int magma_geqrf_batched(int m, int n, double **A_ptrs, int lda, double **
 template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
 {
     // GEMMS
-    static inline int gemm(h2opusComputeStream_t stream, char transA, char transB, const int m, const int n, const int k,
-                           const T alpha, const T **A, int lda, const T **B, int ldb, const T beta, T **C, int ldc,
-                           int batchCount)
+    static inline int gemm(h2opusComputeStream_t stream, char transA, char transB, const int m, const int n,
+                           const int k, const T alpha, const T **A, int lda, const T **B, int ldb, const T beta, T **C,
+                           int ldc, int batchCount)
     {
         if (batchCount == 0 || m == 0 || n == 0 || k == 0)
             return 1;
@@ -58,7 +63,7 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         transB = (transB == H2Opus_Trans ? KBLAS_Trans : KBLAS_NoTrans);
 
 #ifdef H2OPUS_PROFILING_ENABLED
-        double batch_gops = (double)(H2OPUS_GEMM_OP_COUNT(m, n, k) * 1e-9) * batchCount;
+        double batch_gops = H2OPUS_GEMM_OP_COUNT(m, n, k) * 1e-9 * batchCount;
         PerformanceCounter::addOpCount(PerformanceCounter::GEMM, batch_gops);
 #endif
         // See if we should use gemv instead of gemm
@@ -66,9 +71,9 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         {
             cudaStream_t cuda_stream = stream->getCudaStream();
             if (transA == KBLAS_Trans)
-                gemv_batch('T', k, m, alpha, (T **)A, (T **)B, beta, C, batchCount, cuda_stream);
+                gemv_batch('T', k, m, alpha, (T **)A, lda, (T **)B, beta, C, batchCount, cuda_stream);
             else
-                gemv_batch('N', m, k, alpha, (T **)A, (T **)B, beta, C, batchCount, cuda_stream);
+                gemv_batch('N', m, k, alpha, (T **)A, lda, (T **)B, beta, C, batchCount, cuda_stream);
 
             return 1;
         }
@@ -102,12 +107,29 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         transB = (transB == H2Opus_Trans ? KBLAS_Trans : KBLAS_NoTrans);
 
 #ifdef H2OPUS_PROFILING_ENABLED
-        double batch_gops = (double)(H2OPUS_GEMM_OP_COUNT(max_m, max_n, max_k) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::GEMM, batch_gops);
+        // cannot sum, device resident memory
+        PerformanceCounter::addOpCount(PerformanceCounter::GEMM,
+                                       H2OPUS_GEMM_OP_COUNT(max_m, max_n, max_k) * batchCount * 1e-9);
 #endif
         // TODO: vbatch gemv without having to do incx and incy arrays
         return kblas_gemm_batch(stream->getKblasHandle(), transA, transB, m, n, k, max_m, max_n, max_k, alpha, A, lda,
                                 B, ldb, beta, C, ldc, batchCount);
+    }
+
+    // Syrk
+    static inline int syrk(h2opusComputeStream_t stream, char uplo, char trans, int m, int n, const T alpha,
+                           const T **A, int lda, const T beta, T **B, int ldb, int batchCount)
+    {
+        if (batchCount == 0)
+            return 1;
+        trans = (trans == H2Opus_Trans ? KBLAS_Trans : KBLAS_NoTrans);
+        uplo = (uplo == H2Opus_Upper ? KBLAS_Upper : KBLAS_Lower);
+
+#ifdef H2OPUS_PROFILING_ENABLED
+        double batch_gops = H2OPUS_SYRK_OP_COUNT(m, n) * 1e-9 * batchCount;
+        PerformanceCounter::addOpCount(PerformanceCounter::GEMM, batch_gops);
+#endif
+        return kblas_syrk_batch(stream->getKblasHandle(), uplo, trans, m, n, alpha, A, lda, beta, B, ldb, batchCount);
     }
 
     // Mixed precision Syrk
@@ -121,6 +143,21 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
                                        batchCount);
     }
 
+    // Regular cholesky
+    static inline int potrf(h2opusComputeStream_t stream, int m, double **A_ptrs, int lda, int batchCount)
+    {
+        // not yet implemented
+        assert(false);
+        return 0;
+    }
+
+    static inline int potrf(h2opusComputeStream_t stream, int *m, int max_m, double **A_ptrs, int *lda, int batchCount)
+    {
+        // not yet implemented
+        assert(false);
+        return 0;
+    }
+
     // Mixed precision Cholesky
     static inline int mp_fused_potrf(h2opusComputeStream_t stream, int *m, int max_m, double **A_ptrs, int *lda,
                                      T **R_ptrs, int *ldr, double *R_diag, int *block_ranks, int batchCount)
@@ -132,20 +169,37 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
                                            stream->getCudaStream());
     }
 
+    // Rank deficient Cholesky
+    static inline int potrf_rd(h2opusComputeStream_t stream, int m, T **A_ptrs, int lda, int batchCount)
+    {
+        potrf_rd_batch(m, A_ptrs, lda, batchCount, stream);
+        return 1;
+    }
+
     // TRSM
-    static inline int trsm(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T **B_ptrs, int *ldb,
-                           T **A_ptrs, int *lda, int batchCount)
+    static inline int trsm_ara(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T **B_ptrs, int *ldb,
+                               T **A_ptrs, int *lda, int batchCount)
     {
         return kblas_ara_trsm_batch(stream->getKblasHandle(), B_ptrs, ldb, A_ptrs, lda, m, n, batchCount, max_m, max_n);
     }
 
+    static inline int trsm(h2opusComputeStream_t stream, char side, char uplo, char trans, char diag, int *m, int *n,
+                           int max_m, int max_n, T alpha, T **A_ptrs, int *lda, T **B_ptrs, int *ldb, int batchCount)
+    {
+        char kblas_side = (side == H2Opus_Left ? KBLAS_Left : KBLAS_Right);
+        char kblas_uplo = (uplo == H2Opus_Upper ? KBLAS_Upper : KBLAS_Lower);
+        char kblas_transA = (trans == H2Opus_Trans ? KBLAS_Trans : KBLAS_NoTrans);
+        char kblas_diag = (diag == H2Opus_Unit ? KBLAS_Unit : KBLAS_NonUnit);
+
+        return kblas_trsm_batch(stream->getKblasHandle(), kblas_side, kblas_uplo, kblas_transA, kblas_diag, m, n, max_m,
+                                max_n, alpha, A_ptrs, lda, B_ptrs, ldb, batchCount);
+    }
     // QR
     static inline int geqrf(h2opusComputeStream_t stream, int m, int n, T *A_strided, int lda, int stride_a,
                             T *tau_strided, int stride_tau, int batchCount)
     {
 #ifdef H2OPUS_PROFILING_ENABLED
-        double qr_gflops = (double)((2 * m * n * n - 2.0 / 3.0 * n * n * n) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::QR, qr_gflops);
+        PerformanceCounter::addOpCount(PerformanceCounter::QR, H2OPUS_QR_OP_COUNT(m, n) * 1e-9 * batchCount);
 #endif
         return kblas_geqrf_batch(stream->getKblasHandle(), m, n, A_strided, lda, stride_a, tau_strided, stride_tau,
                                  batchCount);
@@ -155,18 +209,17 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
                             T *tau_strided, int stride_tau, int batchCount)
     {
 #ifdef H2OPUS_PROFILING_ENABLED
-        double qr_gflops = (double)((2 * m * n * n - 2.0 / 3.0 * n * n * n) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::QR, qr_gflops);
+        PerformanceCounter::addOpCount(PerformanceCounter::QR, H2OPUS_QR_OP_COUNT(m, n) * 1e-9 * batchCount);
 #endif
         return kblas_orgqr_batch(stream->getKblasHandle(), m, n, A_strided, lda, stride_a, tau_strided, stride_tau,
                                  batchCount);
     }
 
-    static inline int orgqr(h2opusComputeStream_t stream, int m, int n, T **A_ptrs, int lda, T **tau_ptrs, int batchCount)
+    static inline int orgqr(h2opusComputeStream_t stream, int m, int n, T **A_ptrs, int lda, T **tau_ptrs,
+                            int batchCount)
     {
 #ifdef H2OPUS_PROFILING_ENABLED
-        double qr_gflops = (double)((2 * m * n * n - 2.0 / 3.0 * n * n * n) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::QR, qr_gflops);
+        PerformanceCounter::addOpCount(PerformanceCounter::QR, H2OPUS_QR_OP_COUNT(m, n) * 1e-9 * batchCount);
 #endif
         return kblas_orgqr_batch(stream->getKblasHandle(), m, n, A_ptrs, lda, tau_ptrs, batchCount);
     }
@@ -175,9 +228,8 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
                             T **tau_ptrs, int batchCount)
     {
 #ifdef H2OPUS_PROFILING_ENABLED
-        double qr_gflops =
-            (double)((2 * max_m * max_n * max_n - 2.0 / 3.0 * max_n * max_n * max_n) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::QR, qr_gflops);
+        // cannot sum, device resident memory
+        PerformanceCounter::addOpCount(PerformanceCounter::QR, H2OPUS_QR_OP_COUNT(max_m, max_n) * batchCount * 1e-9);
 #endif
         return kblas_tsqrf_vbatch(stream->getKblasHandle(), m, n, max_m, max_n, A_ptrs, lda, tau_ptrs, batchCount);
     }
@@ -185,40 +237,28 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
     static inline int geqp2(h2opusComputeStream_t stream, int m, int n, T *A_strided, int lda, int stride_a,
                             T *tau_strided, int stride_tau, int *ranks, T eps, int batchCount)
     {
-#ifdef H2OPUS_PROFILING_ENABLED
-        double qr_gflops = (double)((2 * m * n * n - 2.0 / 3.0 * n * n * n) * 1e-9) * batchCount;
-        PerformanceCounter::addOpCount(PerformanceCounter::QR, qr_gflops);
-#endif
+        if (m == 0 || n == 0)
+        {
+            fillArray(ranks, batchCount, 0, stream, H2OPUS_HWTYPE_GPU);
+            return 1;
+        }
+
         if (m <= 512)
         {
+#ifdef H2OPUS_PROFILING_ENABLED
+            PerformanceCounter::addOpCount(PerformanceCounter::QR, H2OPUS_QR_OP_COUNT(m, n) * 1e-9 * batchCount);
+#endif
             return kblas_geqp2_batch(stream->getKblasHandle(), m, n, A_strided, lda, stride_a, tau_strided, stride_tau,
                                      NULL, 0, ranks, eps, batchCount);
         }
         else
         {
             thrust::host_vector<T> A_strided_host = copyGPUArray(A_strided, batchCount * stride_a);
-            thrust::host_vector<T> tau_strided_host = copyGPUArray(tau_strided, batchCount * stride_tau);
-            thrust::host_vector<int> ranks_host = copyGPUArray(ranks, batchCount);
-
-#pragma omp parallel for
-            for (int i = 0; i < batchCount; i++)
-            {
-                T *A_op = vec_ptr(A_strided_host) + i * stride_a;
-                T *tau_op = vec_ptr(tau_strided_host) + i * stride_tau;
-                std::vector<int> jpvt(n, 0);
-
-                int ret_val = lapack_geqp3(m, n, A_op, lda, &jpvt[0], tau_op);
-                int k = 0;
-                while (k < n && fabs(A_op[k + k * lda]) * sqrt(n - k) > eps)
-                    k++;
-                ranks_host[i] = k;
-                for (k = ranks_host[i]; k < n; k++)
-                    tau_op[k] = 0;
-
-                if (ret_val != 0)
-                    printf("GEQP3 failure (%d) on operation %d: %d %d %d %p\n", ret_val, i, m, n, lda, A_op);
-            }
-
+            thrust::host_vector<T> tau_strided_host(batchCount * stride_tau, 0);
+            thrust::host_vector<int> ranks_host(batchCount);
+            H2OpusBatched<H2Opus_Real, H2OPUS_HWTYPE_CPU>::geqp2(stream, m, n, vec_ptr(A_strided_host), lda, stride_a,
+                                                                 vec_ptr(tau_strided_host), stride_tau,
+                                                                 vec_ptr(ranks_host), eps, batchCount);
             cudaMemcpy(A_strided, vec_ptr(A_strided_host), A_strided_host.size() * sizeof(T), cudaMemcpyHostToDevice);
             cudaMemcpy(tau_strided, vec_ptr(tau_strided_host), tau_strided_host.size() * sizeof(T),
                        cudaMemcpyHostToDevice);
@@ -226,6 +266,14 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
 
             return 1;
         }
+    }
+
+    // SVD
+    static inline int gesvd(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T **A_ptrs, int *lda,
+                            T **U_ptrs, int *ldu, T **S_ptrs, T **V_ptrs, int *ldv, T eps, int *ranks, int batchCount)
+    {
+        assert(false);
+        return 0;
     }
 
     // Copies
@@ -282,8 +330,8 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         return kblas_transpose_batch(stream->getKblasHandle(), m, n, A_ptrs, lda, At_ptrs, ldat, batchCount);
     }
 
-    static inline int transpose(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T **A_ptrs, int *lda,
-                                T **At_ptrs, int *ldat, int batchCount)
+    static inline int transpose(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T **A_ptrs,
+                                int *lda, T **At_ptrs, int *ldat, int batchCount)
     {
         if (max_m == 0 || max_n == 0)
             return 1;
@@ -294,8 +342,9 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
 
     // Matrix addition
     // C = alpha * A + beta * B
-    static inline void add_matrix(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T alpha, T **A_ptrs,
-                                  int *lda, T beta, T **B_ptrs, int *ldb, T **C_ptrs, int *ldc, int batchCount)
+    static inline void add_matrix(h2opusComputeStream_t stream, int *m, int *n, int max_m, int max_n, T alpha,
+                                  T **A_ptrs, int *lda, T beta, T **B_ptrs, int *ldb, T **C_ptrs, int *ldc,
+                                  int batchCount)
     {
         if (max_m == 0 || max_n == 0)
             return;
@@ -350,6 +399,15 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         batchBlockSetZero(stream->getCudaStream(), m, n, max_m, max_n, A_ptrs, lda, batchCount);
     }
 
+    // Set upper triangular half to zero
+    static inline int setUpperZero(h2opusComputeStream_t stream, int m, int n, T **A_ptrs, int lda, int batchCount)
+    {
+        if (m == 0 || n == 0)
+            return 1;
+
+        batchBlockSetUpperZero(stream->getCudaStream(), m, n, A_ptrs, lda, batchCount);
+        return 1;
+    }
     // Batch random number generation
     static inline int rand(h2opusComputeStream_t stream, h2opusHandle_t handle, int *m, int *n, int max_m, int max_n,
                            T **A_ptrs, int *lda, int batchCount)

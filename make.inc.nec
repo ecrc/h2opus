@@ -1,0 +1,57 @@
+# Example configuration for the NEC-SX Vector Engine
+
+H2OPUS_USE_NEC = 1
+
+# C++ compiler
+CXX = nc++
+
+# Turn on tracing
+#TRACE = -ftrace
+
+# Turn on optimization reports
+#REP = -report-all
+
+# Silent reports
+SILENT = -fdiag-vector=0 -fdiag-parallel=0 -fdiag-inline=0
+
+# Debugging (using -g and -traceback makes gdb segfault!)
+#DBG = -traceback=verbose
+
+# test_tlr segfaults at runtime if we compile the library and the executables with the first two options only!
+# It is fine if added as extra flags when compiling the example only
+# e.g. make test_tlr CXXFLAGS="-finline-functions -finline-max-depth=5"
+# Adding the third and fourth options prevent segfaults
+OPT = -finline-functions -finline-max-depth=5 -fno-defer-inline-template-instantiation -fnamed-alias
+
+# difference between 02 and 01 Compiler flags
+# these are the 02 flags
+#-fassociative-math                       : enable
+#-fcheck-noexcept-violation               : disable
+#-floop-unroll                            : enable
+#-fnamed-alias                            : disable
+#-fnamed-noalias                          : enable
+#-freciprocal-math                        : enable
+#-fstrict-aliasing                        : enable
+#-fthis-pointer-alias                     : disable
+#-fthis-pointer-noalias                   : enable
+#-mvector-dependency-test                 : enable
+#-mvector-fma                             : enable
+
+# OPT += -mno-vector-dependency-test
+# OPT += -fthis-pointer-alias
+# OPT += -fnamed-alias
+
+CXXFLAGS = -Wall $(SILENT) -static-nec $(REP) $(TRACE) -fopenmp -O2 $(OPT) $(DBG) -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED -mschedule-runtime
+
+# Linker flags
+LDFLAGS = -static-nec $(TRACE) -ldl -lpthread -lm -fopenmp
+
+# To link against GSL in examples/ns
+LDFLAGS += -lcblas -lblas_sequential -lncc
+
+# BLAS and ASL (random numbers)
+BLAS_INCDIR = $(NLC_HOME)/include
+BLAS_LIBS = -Wl,-rpath,$(NLC_HOME)/lib -L$(NLC_HOME)/lib -llapack -lasl_sequential -lblas_sequential
+
+# for CPU only builds, we need thrust
+THRUST_INCDIR = $(THRUST_DIR)/include

@@ -2,6 +2,7 @@
 #define __EXAMPLE_UTIL_H__
 
 #include <map>
+#include <cstdio>
 #include <string>
 
 // Simple command line argument parser
@@ -37,6 +38,21 @@ struct H2OpusArgParser
 
     template <typename T> T parseOption(std::string &value);
 
+    template <typename T> std::string toString(const T &t)
+    {
+        return std::to_string(t);
+    }
+
+    std::string toString(const char *t)
+    {
+        return t;
+    }
+
+    std::string toString(const std::string &t)
+    {
+        return t;
+    }
+
   public:
     H2OpusArgParser()
     {
@@ -63,7 +79,7 @@ struct H2OpusArgParser
                     std::pair<std::string, std::string>(std::string(argv[i] + insert_pos), std::string("")));
                 if (insert_ret.second == false)
                 {
-                    printf("Argument %d %s was repeated\n", i, argv[i] + insert_pos);
+                    fprintf(stderr, "Argument %d %s was repeated\n", i, argv[i] + insert_pos);
                     validArgs = false;
                 }
                 adding_arg = true;
@@ -75,7 +91,7 @@ struct H2OpusArgParser
             }
             else
             {
-                printf("Argument %d %s is invalid\n", i, argv[i]);
+                fprintf(stderr, "Argument %d %s is invalid\n", i, argv[i]);
                 validArgs = false;
             }
         }
@@ -86,7 +102,7 @@ struct H2OpusArgParser
     T option(const char *short_name, const char *long_name, const char *description, T default_value)
     {
         Option opt(short_name, long_name, description);
-        opt.default_value = std::to_string(default_value);
+        opt.default_value = toString(default_value);
 
         options.push_back(opt);
         ArgMap::iterator option_it = findOption(opt);
@@ -117,9 +133,9 @@ struct H2OpusArgParser
     void printUsage()
     {
         std::cout << "Accepted arguments:\n";
-        for (int i = 0; i < options.size(); i++)
-            printf("\t-%-4s, --%-20s \t %s (Default value: %s)\n", options[i].short_name.c_str(),
-                   options[i].long_name.c_str(), options[i].description.c_str(), options[i].default_value.c_str());
+        for (int i = 0; i < (int)options.size(); i++)
+            fprintf(stdout, "\t-%-4s, --%-20s \t %s (Default value: %s)\n", options[i].short_name.c_str(),
+                    options[i].long_name.c_str(), options[i].description.c_str(), options[i].default_value.c_str());
     }
 };
 
@@ -132,11 +148,11 @@ template <> int H2OpusArgParser::parseOption(std::string &value)
     }
     catch (std::invalid_argument const &e)
     {
-        printf("Bad input: std::invalid_argument thrown\n");
+        fprintf(stderr, "Bad input: std::invalid_argument thrown: %s\n", e.what());
     }
     catch (std::out_of_range const &e)
     {
-        printf("Integer overflow: std::out_of_range thrown\n");
+        fprintf(stderr, "Integer overflow: std::out_of_range thrown: %s\n", e.what());
     }
 
     validArgs = false;
@@ -152,11 +168,11 @@ template <> double H2OpusArgParser::parseOption(std::string &value)
     }
     catch (std::invalid_argument const &e)
     {
-        printf("Bad input: std::invalid_argument thrown\n");
+        fprintf(stderr, "Bad input: std::invalid_argument thrown: %s\n", e.what());
     }
     catch (std::out_of_range const &e)
     {
-        printf("Integer overflow: std::out_of_range thrown\n");
+        fprintf(stderr, "Integer overflow: std::out_of_range thrown: %s\n", e.what());
     }
 
     validArgs = false;
@@ -172,15 +188,20 @@ template <> float H2OpusArgParser::parseOption(std::string &value)
     }
     catch (std::invalid_argument const &e)
     {
-        printf("Bad input: std::invalid_argument thrown\n");
+        fprintf(stderr, "Bad input: std::invalid_argument thrown: %s\n", e.what());
     }
     catch (std::out_of_range const &e)
     {
-        printf("Integer overflow: std::out_of_range thrown\n");
+        fprintf(stderr, "Integer overflow: std::out_of_range thrown: %s\n", e.what());
     }
 
     validArgs = false;
     return 0;
+}
+
+template <> const char *H2OpusArgParser::parseOption(std::string &value)
+{
+    return value.c_str();
 }
 
 inline H2Opus_Real vec_diff(H2Opus_Real *x1, H2Opus_Real *x2, int n)
@@ -189,10 +210,28 @@ inline H2Opus_Real vec_diff(H2Opus_Real *x1, H2Opus_Real *x2, int n)
     for (int i = 0; i < n; i++)
     {
         H2Opus_Real entry_diff = x1[i] - x2[i];
+
         diff += entry_diff * entry_diff;
         norm_x += x1[i] * x1[i];
     }
     return sqrt(diff / norm_x);
 }
+
+#ifdef H2OPUS_USE_MPI
+// Convenience routine to call MPI initialization
+#include <h2opus/distributed/comm_wrapper.h>
+void initMPI(int argc, char **argv, bool thr)
+{
+    if (!thr)
+    {
+        mpiErrchk(MPI_Init(&argc, &argv));
+    }
+    else
+    { /* Use MPI_THREAD_MULTIPLE if you want to use threaded MPI calls within H2OPUS */
+        int provided_support;
+        mpiErrchk(MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided_support));
+    }
+}
+#endif
 
 #endif

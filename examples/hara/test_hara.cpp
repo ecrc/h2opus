@@ -43,8 +43,8 @@ template <int hw> class SquareSampler : public HMatrixSampler
 
     void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
     {
-        if (temp_product.size() < samples * hmatrix->n)
-            resizeThrustArray(temp_product, samples * hmatrix->n);
+        if (temp_product.size() < (size_t)samples * hmatrix->n)
+            temp_product.resize(samples * hmatrix->n);
 
         hgemv(H2Opus_NoTrans, 1, *hmatrix, input, hmatrix->n, 0, vec_ptr(temp_product), hmatrix->n, samples,
               h2opus_handle);
@@ -89,12 +89,13 @@ int main(int argc, char **argv)
     H2Opus_Real trunc_eps = arg_parser.option<H2Opus_Real>(
         "te", "trunc_eps", "Relative truncation error threshold for the construction", 1e-4);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
+    bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
     if (!arg_parser.valid() || print_help)
     {
         arg_parser.printUsage();
-        exit(0);
+        return 0;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -146,7 +147,15 @@ int main(int argc, char **argv)
     // Reconstruction
     test_construction<H2OPUS_HWTYPE_CPU>(&cpu_reconstruct_sampler, constructed_hmatrix, max_samples, trunc_eps,
                                          "Matrix", h2opus_handle);
+    if (print_results)
+    {
+        dumpHMatrix(constructed_hmatrix, 2, NULL);
 
+        H2Opus_Real *dmat = (H2Opus_Real *)malloc(n * n * sizeof(H2Opus_Real));
+        expandHmatrix(constructed_hmatrix, dmat);
+        printDenseMatrix(dmat, n, n, n, 2, NULL);
+        free(dmat);
+    }
     // Clear out matrix data
     constructed_hmatrix = zero_hmatrix;
 

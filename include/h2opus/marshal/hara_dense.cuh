@@ -39,7 +39,7 @@ template <class T> struct HARA_WeakAdm_Dense_Update_Input_Functor
         int v_index = node_v_index[hnode_index];
 
         rows_array[update_index] = node_u_len[u_index];
-        // The generate identiy matrices should be node_u_len x node_v_len
+        // The generated matrices should be node_u_len x node_v_len
         // but we extend it to the full columns of the update, so that the
         // batch transpose can fill in the zeros of the input vectors for us
         cols_array[update_index] = update_cols; // node_v_len[v_index];

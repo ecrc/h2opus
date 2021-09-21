@@ -136,8 +136,6 @@ void generateHNodeEntries(THNodeTree<hw> &hnodes, TH2OpusKDTree<T, hw> &u_kdtree
 
     int ld = u_basis_tree.leaf_size;
     assert(v_basis_tree.leaf_size == ld);
-    int *u_index_map = &(u_basis_tree.index_map[0]);
-    int *v_index_map = &(v_basis_tree.index_map[0]);
 
 #pragma omp parallel for
     for (int leaf = 0; leaf < num_dense_leaves; leaf++)
@@ -181,14 +179,19 @@ void buildHMatrixStructure(THMatrix<hw> &hmatrix, TH2OpusKDTree<T, hw> &kdtree,
                            TH2OpusAdmissibility<T, hw> &admissibility)
 {
     hmatrix.n = kdtree.getDataSet()->getDataSetSize();
-    hmatrix.u_basis_tree.generateStructureFromKDTree(kdtree, 0, true, kdtree.getDepth());
-    hmatrix.hnodes.determineStructure(kdtree, admissibility, hmatrix.u_basis_tree);
 
-    hmatrix.hnodes.allocateBSRData(hmatrix.u_basis_tree);
-    hmatrix.hnodes.allocateBSNData(hmatrix.u_basis_tree);
+    TBasisTree<hw> &u_basis_tree = hmatrix.u_basis_tree;
+    TBasisTree<hw> &v_basis_tree = (hmatrix.sym ? hmatrix.u_basis_tree : hmatrix.v_basis_tree);
 
+    std::vector<int> v_list(1, 0);
+    u_basis_tree.generateStructureFromKDTree(kdtree, 0, true, kdtree.getDepth());
     if (!hmatrix.sym)
         hmatrix.v_basis_tree.copyStructureData(hmatrix.u_basis_tree);
+
+    hmatrix.hnodes.determineStructure(kdtree, admissibility, u_basis_tree, 0, v_basis_tree, 0, u_basis_tree.depth,
+                                      v_list);
+    hmatrix.hnodes.allocateBSRData(u_basis_tree, v_basis_tree, 0, 0);
+    hmatrix.hnodes.allocateBSNData(u_basis_tree, v_basis_tree, 0, 0);
 }
 
 template <class T, int hw>

@@ -1,0 +1,18 @@
+# This is an example configuration using CRAY compiler wrappers for CRAY compilers
+# Assumes using libsci for BLAS/LAPACK
+
+# C++ compiler
+CXX = CC
+H2OPUS_USE_MPI = 1
+
+# Compiler flags
+CXXFLAGS = -fPIC ‐h std=c++11 -h omp -O3 -DH2OPUS_PROFILING_ENABLED
+
+# Linker flags
+LDFLAGS = -h omp
+
+# for CPU only builds, we need thrust
+THRUST_INCDIR = $(THRUST_DIR)/include
+
+# Build shared library
+H2OPUS_ENABLE_SHARED = 1

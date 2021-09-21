@@ -49,6 +49,12 @@ void hgemv_denseMult(int trans, H2Opus_Real alpha, HNodeTree &hnodes, H2Opus_Rea
                      H2Opus_Real *Y, int ldy, int num_vectors, BasisTreeLevelData &u_level_data,
                      BasisTreeLevelData &v_level_data, HgemvWorkspace &workspace, h2opusComputeStream_t stream);
 
+void hgemv_downsweep_leaves(BasisTree &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors, HgemvWorkspace &workspace,
+                            h2opusComputeStream_t stream);
+
+void hgemv_downsweep_level(BasisTree &basis_tree, int num_vectors, int level, HgemvWorkspace &workspace,
+                           h2opusComputeStream_t stream);
+
 void hgemv_upsweep_leaves(H2Opus_Real alpha, BasisTree &basis_tree, H2Opus_Real *X, int ldx, int num_vectors,
                           HgemvWorkspace &workspace, h2opusComputeStream_t stream);
 
@@ -86,6 +92,12 @@ void hgemv_denseMult(int kblas_trans_mode, H2Opus_Real alpha, HNodeTree_GPU &hno
 void hgemv_denseMult(int trans, H2Opus_Real alpha, HNodeTree_GPU &hnodes, H2Opus_Real *X, int ldx, H2Opus_Real beta,
                      H2Opus_Real *Y, int ldy, int num_vectors, BasisTreeLevelData &u_level_data,
                      BasisTreeLevelData &v_level_data, HgemvWorkspace &workspace, h2opusComputeStream_t stream);
+
+void hgemv_downsweep_leaves(BasisTree_GPU &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors,
+                            HgemvWorkspace &workspace, h2opusComputeStream_t stream);
+
+void hgemv_downsweep_level(BasisTree_GPU &basis_tree, int num_vectors, int level, HgemvWorkspace &workspace,
+                           h2opusComputeStream_t stream);
 
 void hgemv_upsweep_leaves(H2Opus_Real alpha, BasisTree_GPU &basis_tree, H2Opus_Real *X, int ldx, int num_vectors,
                           HgemvWorkspace &workspace, h2opusComputeStream_t stream);

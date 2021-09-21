@@ -14,7 +14,7 @@ inline std::vector<int> FisherYatesShuffle(int samples, int elements)
 
     for (int i = 0; i < samples; i++)
     {
-        int j = (int)((float)rand() / RAND_MAX * (elements - i - 1));
+        int j = (int)((float)rand() / (float)(RAND_MAX) * (elements - i - 1));
         a[i] = source[j];
         std::swap(source[j], source[elements - i - 1]);
     }
@@ -137,7 +137,7 @@ inline H2Opus_Real getApproximationErrorEstimate(HMatrix &hmatrix, MatGen &mat_g
             int v_index = hmatrix.hnodes.node_v_index[tree_index];
 
             int u_1 = u_basis_tree.node_start[u_index], v_1 = v_basis_tree.node_start[v_index];
-            int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
+            // int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
 
             H2Opus_Real *s_matrix = hmatrix.hnodes.getCouplingMatrix(level, node_index - level_start);
             H2Opus_Real *u_matrix = u_matrices + hmatrix.n * max_rank * level + u_1;
@@ -152,11 +152,11 @@ inline H2Opus_Real getApproximationErrorEstimate(HMatrix &hmatrix, MatGen &mat_g
             averaged_nodes++;
 
             // Calculate S * V'
-            cblas_gemm(CblasNoTrans, CblasTrans, v_dim, v_len, v_dim, 1, s_matrix, v_dim, v_matrix, hmatrix.n, 0,
-                       sv_matrix, v_dim);
+            h2opus_fbl_gemm(H2OpusFBLNoTrans, H2OpusFBLTrans, v_dim, v_len, v_dim, 1, s_matrix, v_dim, v_matrix,
+                            hmatrix.n, 0, sv_matrix, v_dim);
             // Calculate U * (S * V')
-            cblas_gemm(CblasNoTrans, CblasNoTrans, u_len, v_len, v_dim, 1, u_matrix, hmatrix.n, sv_matrix, v_dim, 0,
-                       usv_matrix, u_len);
+            h2opus_fbl_gemm(H2OpusFBLNoTrans, H2OpusFBLNoTrans, u_len, v_len, v_dim, 1, u_matrix, hmatrix.n, sv_matrix,
+                            v_dim, 0, usv_matrix, u_len);
 
             for (int j = 0; j < u_len; j++)
             {
@@ -234,7 +234,7 @@ template <class MatGen> inline H2Opus_Real getApproximationError(HMatrix &hmatri
             int v_index = hmatrix.hnodes.node_v_index[tree_index];
 
             int u_1 = u_basis_tree.node_start[u_index], v_1 = v_basis_tree.node_start[v_index];
-            int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
+            // int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
 
             H2Opus_Real *s_matrix = hmatrix.hnodes.getCouplingMatrix(level, node_index - level_start);
             H2Opus_Real *u_matrix = u_matrices + hmatrix.n * max_rank * level + u_1;

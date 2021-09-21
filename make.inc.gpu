@@ -1,34 +1,30 @@
+# Example configuration for NVIDIA GPU
+
 # include CPU stuff
 include make.inc.cpu
 
-# we compile the double precision backend
-undefine H2OPUS_USE_SINGLE_PRECISION
-
 # Define the make variable to activate GPU backend compilation
-H2OPUS_USE_GPU=1
+H2OPUS_USE_GPU = 1
 
 # We need CUDA
 # we specify include folder and linking line
 ifneq ($(CUDA_DIR),)
-  H2OPUS_CUDA_INCDIR = $(CUDA_DIR)/include
-  H2OPUS_CUDA_LIBS = -Wl,-rpath,$(CUDA_DIR)/lib64 -L$(CUDA_DIR)/lib64 -lcudart -lcublas -lcusparse -lcurand
+  CUDA_INCDIR = $(CUDA_DIR)/include
+  CUDA_LIBS = -Wl,-rpath,$(CUDA_DIR)/lib64 -L$(CUDA_DIR)/lib64 -lcuda -lcudart -lcublas -lcusparse -lcurand
   NVCC = $(CUDA_DIR)/bin/nvcc
 endif
-NVCCFLAGS = -m64 -O3 -std=c++11 --expt-relaxed-constexpr
+# if we don't specify a host compiler here via -ccbin, CXX is used and CXXFLAGS are passed as -Xcompiler flags
+NVCCFLAGS = -m64 -O3 -std=c++14 --expt-relaxed-constexpr
 
 # replace with your compute capability
 H2OPUS_GENCODE_FLAGS = -gencode arch=compute_70,code=sm_70
 
 # We need MAGMA from ICL
 # we specify include folder and linking line
-ifneq ($(MAGMA_DIR),)
-  H2OPUS_MAGMA_INCDIR = $(MAGMA_DIR)/include
-  H2OPUS_MAGMA_LIBS = $(MAGMA_DIR)/lib/libmagma.a
-endif
+MAGMA_INCDIR = $(MAGMA_DIR)/include
+MAGMA_LIBS = $(MAGMA_DIR)/lib/libmagma.a
 
 # We need KBLAS
 # we specify include folder and linking line
-ifneq ($(KBLAS_DIR),)
-  H2OPUS_KBLAS_INCDIR = $(KBLAS_DIR)/include
-  H2OPUS_KBLAS_LIBS = $(KBLAS_DIR)/lib/libkblas-gpu.a
-endif
+KBLAS_INCDIR = $(KBLAS_DIR)/include
+KBLAS_LIBS = $(KBLAS_DIR)/lib/libkblas-gpu.a

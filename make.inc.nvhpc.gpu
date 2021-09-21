@@ -1,0 +1,25 @@
+# GPU configuration file for NVHPC
+
+# Include specs from CPU only builds
+include make.inc.nvhpc.cpu
+
+# GPU compilation
+H2OPUS_USE_GPU = 1
+NVCC = $(NVHPC_DIR)/compilers/bin/nvcc
+
+# Uncomment to use CUDA_AWARE_MPI support
+# H2OPUS_USE_CUDA_AWARE_MPI = 1
+
+# When we explicily list -ccbin as option, CXXFLAGS are not propagated to the nvcc compiler
+# We explicitly use GCC as host compiler (default in nvcc anyway)
+# CXX is then used only as a linker
+NVCCFLAGS = -ccbin g++ -Xcompiler -fopenmp -Xcompiler -Wall -std=c++14 --expt-relaxed-constexpr
+H2OPUS_GENCODE_FLAGS = -gencode arch=compute_80,code=sm_80
+CXXCPPFLAGS += -I$(NVHPC_DIR)/cuda/include -I$(NVHPC_DIR)/math_libs/include -I$(MPI_DIR)/include
+CUDA_LIBS += -Wl,-rpath,$(NVHPC_DIR)/math_libs/lib64 -L$(NVHPC_DIR)/math_libs/lib64 -lcublas -lcusparse -lcusolver -lcurand -Wl,-rpath,$(NVHPC_DIR)/cuda/lib64 -L$(NVHPC_DIR)/cuda/lib64 -lcuda -lcudart
+
+# MAGMA and KBLAS
+MAGMA_INCDIR = $(MAGMA_DIR)/include
+MAGMA_LIBS = $(MAGMA_DIR)/lib/libmagma.a
+KBLAS_INCDIR = $(KBLAS_DIR)/include
+KBLAS_LIBS = $(KBLAS_DIR)/lib/libkblas.a

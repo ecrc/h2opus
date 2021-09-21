@@ -12,7 +12,7 @@ template <int hw> void THNodeTree<hw>::allocateNodes(int num_nodes)
     node_v_index.resize(num_nodes, H2OPUS_EMPTY_NODE);
     node_morton_level_index.resize(num_nodes, H2OPUS_EMPTY_NODE);
     node_to_leaf.resize(num_nodes, H2OPUS_EMPTY_NODE);
-    node_type.resize(num_nodes, HMATRIX_INNER_NODE);
+    node_type.resize(num_nodes, H2OPUS_HMATRIX_INNER_NODE);
 }
 
 template <int hw> void THNodeTree<hw>::allocateLeaves(int dense, int rank)
@@ -49,7 +49,7 @@ void THNodeTree<hw>::setLevelPointers(int *level_counts, int *rank_level_counts,
 template <int hw>
 void THNodeTree<hw>::allocateMatrixData(BasisTreeLevelData &basis_level_data, int start_level, int depth)
 {
-    assert(this->depth = depth);
+    assert(this->depth == depth);
 
     this->level_data.setRankFromBasis(basis_level_data, start_level);
 
@@ -190,7 +190,7 @@ void THNodeTree<hw>::buildAdmissibleBlocks(TH2OpusKDTree<H2Opus_Real, hw> &kdtre
     {
         int rank_leaf_index = getCouplingLevelStart(level) + rank_level_counts[level];
 
-        node_type[node_index] = HMATRIX_RANK_MATRIX;
+        node_type[node_index] = H2OPUS_HMATRIX_RANK_MATRIX;
         node_to_leaf[node_index] = rank_leaf_index;
 
         rank_leaf_tree_index[rank_leaf_index] = node_index;
@@ -198,7 +198,7 @@ void THNodeTree<hw>::buildAdmissibleBlocks(TH2OpusKDTree<H2Opus_Real, hw> &kdtre
     }
     else if (kdtree.isLeaf(u_cluster_index) || kdtree.isLeaf(v_cluster_index))
     {
-        node_type[node_index] = HMATRIX_DENSE_MATRIX;
+        node_type[node_index] = H2OPUS_HMATRIX_DENSE_MATRIX;
         node_to_leaf[node_index] = dense_leaf_count;
 
         dense_leaf_tree_index[dense_leaf_count] = node_index;
@@ -237,7 +237,7 @@ template <int hw>
 void THNodeTree<hw>::determineStructure(TH2OpusKDTree<H2Opus_Real, hw> &kdtree,
                                         TH2OpusAdmissibility<H2Opus_Real, hw> &admissibility,
                                         TBasisTree<hw> &u_basis_tree, int u_start_level, TBasisTree<hw> &v_basis_tree,
-                                        int v_start_level, int max_depth, std::vector<int> v_list)
+                                        int v_start_level, int max_depth, std::vector<int> &v_list)
 {
     num_dense_leaves = 0;
     depth = u_basis_tree.depth - u_start_level;

@@ -3,6 +3,8 @@
 
 // TODO: deal with unsymmetric case and when the ranks of the row and column basis are not the same
 
+#define H2OPUS_HCOMPRESS_WS_PTR(member) (workspace ? &(workspace->member) : NULL)
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Helper routines
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -134,7 +136,7 @@ void hcompress_upsweep_workspace(BasisTreeLevelData &level_data, void *ws_base, 
     }
     required_bytes = (te_data_size + u_size + tau_size) * sizeof(H2Opus_Real);
 
-    // Temporary memory for ranks and matrix dimenion data for non-uniform batches
+    // Temporary memory for ranks and matrix dimension data for non-uniform batches
     // Align memory to sizeof(int)
     required_bytes += (required_bytes % sizeof(int));
     size_t largest_level_size = level_data.getLevelSize(level_data.getLargestLevel());
@@ -187,18 +189,19 @@ void hcompress_generate_basis_workspace(HNodeTreeLevelData &hnode_level_data, st
         int level_rows = basis_level_data.getLevelSize(level);
 
         int parent_rank = (level > 0 ? hnode_level_data.getLevelRank(level - 1) : 0);
-        size_t ZE_entries = parent_rank * level_rank + level_rank * level_rank * bsn_max_nodes[level];
+        int level_max_nodes = bsn_max_nodes[level];
         if (offdiag_bsn_max_nodes)
-            ZE_entries += level_rank * level_rank * (*offdiag_bsn_max_nodes)[level];
+            level_max_nodes += (*offdiag_bsn_max_nodes)[level];
 
-        size_t level_node_increment = std::min(COMPRESSION_BASIS_GEN_MAX_NODES, level_rows);
+        size_t ZE_entries = parent_rank * level_rank + level_rank * level_rank * level_max_nodes;
+        size_t level_node_increment = std::min(H2OPUS_COMPRESSION_BASIS_GEN_MAX_NODES, level_rows);
 
         row_data_entries = std::max(row_data_entries, level_node_increment * ZE_entries);
         tau_entries = std::max(tau_entries, level_node_increment * level_rank);
         max_rows = std::max(max_rows, level_rows);
     }
 
-    size_t allocated_node_increment = std::min(COMPRESSION_BASIS_GEN_MAX_NODES, max_rows);
+    size_t allocated_node_increment = std::min(H2OPUS_COMPRESSION_BASIS_GEN_MAX_NODES, max_rows);
     if (workspace)
     {
         workspace->stacked_node_data = (H2Opus_Real *)ws_base;
@@ -239,41 +242,120 @@ void hcompress_generate_basis_workspace(HNodeTreeLevelData &hnode_level_data, st
     }
 }
 
-H2OpusWorkspaceState hcompress_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
-                                         HNodeTreeLevelData &hnode_level_data, std::vector<int> &diagonal_max_nodes,
-                                         HNodeTreeLevelData *offdiag_hnode_level_data,
-                                         std::vector<int> *offdiag_max_nodes, bool symmetric, int hw)
+H2OpusWorkspaceState hcompress_get_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                                             HNodeTreeLevelData &hnode_level_data,
+                                             std::vector<int> &diagonal_max_row_nodes,
+                                             std::vector<int> &diagonal_max_col_nodes,
+                                             HNodeTreeLevelData *offdiag_hnode_level_data,
+                                             std::vector<int> *offdiag_max_row_nodes,
+                                             std::vector<int> *offdiag_max_col_nodes, bool symmetric,
+                                             HcompressWorkspace *workspace, h2opusHandle_t h2opus_handle, int hw)
 {
-    // The only workspace we need throughout the whole compression is the Z_hat and T_hat
+    void *ws_entries_base = NULL;
+    void **ws_ptr_base = NULL;
+
+    if (workspace)
+    {
+        h2opusWorkspace_t h2opus_ws = h2opus_handle->getWorkspace();
+        workspace->symmetric = symmetric;
+
+        // Allocate the workspace pointers from the handle
+        ws_entries_base = (void *)h2opus_ws->getData(hw);
+        ws_ptr_base = (void **)h2opus_ws->getPtrs(hw);
+
+        // Allocate the host vectors for the pointers to the projection tree levels
+        // and the new ranks for each level
+        workspace->u_upsweep.new_ranks.resize(u_level_data.depth, 0);
+        workspace->u_upsweep.T_hat.resize(u_level_data.depth);
+        workspace->u_upsweep.Z_hat.resize(u_level_data.depth);
+
+        if (!symmetric)
+        {
+            workspace->v_upsweep.new_ranks.resize(v_level_data.depth, 0);
+            workspace->v_upsweep.T_hat.resize(v_level_data.depth);
+            workspace->v_upsweep.Z_hat.resize(v_level_data.depth);
+        }
+    }
+
+    // Allocate Z_hat and T_hat for each basis
     size_t required_u_proj_bytes = 0, required_u_weight_bytes = 0;
     size_t required_v_proj_bytes = 0, required_v_weight_bytes = 0;
-    hcompress_projection_tree_workspace(u_level_data, NULL, NULL, required_u_proj_bytes);
-    hcompress_weight_tree_workspace(u_level_data, NULL, NULL, required_u_weight_bytes);
+
+    void *temp_ws_base = ws_entries_base;
+    hcompress_projection_tree_workspace(u_level_data, H2OPUS_HCOMPRESS_WS_PTR(u_upsweep), temp_ws_base,
+                                        required_u_proj_bytes);
+    temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_u_proj_bytes);
     if (!symmetric)
     {
-        hcompress_projection_tree_workspace(v_level_data, NULL, NULL, required_v_proj_bytes);
-        hcompress_weight_tree_workspace(v_level_data, NULL, NULL, required_v_weight_bytes);
+        hcompress_projection_tree_workspace(v_level_data, H2OPUS_HCOMPRESS_WS_PTR(v_upsweep), temp_ws_base,
+                                            required_v_proj_bytes);
+        temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_v_proj_bytes);
     }
     size_t required_proj_bytes = required_u_proj_bytes + required_v_proj_bytes;
-    size_t required_weight_bytes = std::max(required_u_weight_bytes, required_v_weight_bytes);
 
-    // These are all temporary storage requirements so we take the max of them all
+    // Weight trees
+    hcompress_weight_tree_workspace(u_level_data, H2OPUS_HCOMPRESS_WS_PTR(u_upsweep), temp_ws_base,
+                                    required_u_weight_bytes);
+    temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_u_weight_bytes);
+    if (!symmetric)
+    {
+        hcompress_weight_tree_workspace(v_level_data, H2OPUS_HCOMPRESS_WS_PTR(v_upsweep), temp_ws_base,
+                                        required_v_weight_bytes);
+        temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_v_weight_bytes);
+    }
+    size_t required_weight_bytes = required_u_weight_bytes + required_v_weight_bytes;
+
+    // These are all temporary storage
     size_t required_bgen_bytes, required_bgen_ptr_bytes;
-    size_t required_upsweep_bytes, required_upsweep_ptr_bytes;
     size_t required_projection_bytes, required_projection_ptr_bytes;
+    size_t required_upsweep_bytes, required_upsweep_ptr_bytes;
     size_t required_top_level_bytes, required_top_level_ptr_bytes;
 
-    hcompress_upsweep_workspace(u_level_data, NULL, NULL, NULL, required_upsweep_bytes, required_upsweep_ptr_bytes);
-
-    hcompress_generate_basis_workspace(hnode_level_data, diagonal_max_nodes, offdiag_hnode_level_data,
-                                       offdiag_max_nodes, u_level_data, NULL, NULL, NULL, required_bgen_bytes,
-                                       required_bgen_ptr_bytes);
-
-    hcompress_hnode_projection_workspace(hnode_level_data, offdiag_hnode_level_data, NULL, NULL, NULL,
+    hcompress_hnode_projection_workspace(hnode_level_data, offdiag_hnode_level_data,
+                                         H2OPUS_HCOMPRESS_WS_PTR(projection), temp_ws_base, ws_ptr_base,
                                          required_projection_bytes, required_projection_ptr_bytes);
 
-    hcompress_project_top_level_workspace(u_level_data, NULL, NULL, NULL, required_top_level_bytes,
-                                          required_top_level_ptr_bytes);
+    hcompress_generate_basis_workspace(hnode_level_data, diagonal_max_row_nodes, offdiag_hnode_level_data,
+                                       offdiag_max_row_nodes, u_level_data, temp_ws_base, ws_ptr_base,
+                                       H2OPUS_HCOMPRESS_WS_PTR(optimal_u_bgen), required_bgen_bytes,
+                                       required_bgen_ptr_bytes);
+
+    hcompress_project_top_level_workspace(u_level_data, H2OPUS_HCOMPRESS_WS_PTR(u_top_level), temp_ws_base, ws_ptr_base,
+                                          required_top_level_bytes, required_top_level_ptr_bytes);
+    if (!symmetric)
+    {
+        size_t required_v_bgen_bytes, required_v_bgen_ptr_bytes;
+        size_t required_v_top_level_bytes, required_v_top_level_ptr_bytes;
+
+        hcompress_generate_basis_workspace(hnode_level_data, diagonal_max_col_nodes, offdiag_hnode_level_data,
+                                           offdiag_max_col_nodes, v_level_data, temp_ws_base, ws_ptr_base,
+                                           H2OPUS_HCOMPRESS_WS_PTR(optimal_v_bgen), required_v_bgen_bytes,
+                                           required_v_bgen_ptr_bytes);
+
+        hcompress_project_top_level_workspace(v_level_data, H2OPUS_HCOMPRESS_WS_PTR(v_top_level), temp_ws_base,
+                                              ws_ptr_base, required_v_top_level_bytes, required_v_top_level_ptr_bytes);
+
+        required_bgen_bytes = std::max(required_bgen_bytes, required_v_bgen_bytes);
+        required_bgen_ptr_bytes = std::max(required_bgen_ptr_bytes, required_v_bgen_ptr_bytes);
+        required_top_level_bytes = std::max(required_top_level_bytes, required_v_top_level_bytes);
+        required_top_level_ptr_bytes = std::max(required_top_level_ptr_bytes, required_v_top_level_ptr_bytes);
+    }
+
+    // The upsweep for the U and V basis are currently interleaved to allow us to select the max rank
+    // at each level instead of having independent ranks, so we need memory for both
+    hcompress_upsweep_workspace(u_level_data, temp_ws_base, ws_ptr_base, H2OPUS_HCOMPRESS_WS_PTR(u_upsweep),
+                                required_upsweep_bytes, required_upsweep_ptr_bytes);
+    if (!symmetric)
+    {
+        size_t required_v_upsweep_bytes, required_v_upsweep_ptr_bytes;
+        temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_upsweep_bytes);
+        ws_ptr_base = (void **)((unsigned char *)ws_ptr_base + required_upsweep_ptr_bytes);
+
+        hcompress_upsweep_workspace(v_level_data, temp_ws_base, ws_ptr_base, H2OPUS_HCOMPRESS_WS_PTR(v_upsweep),
+                                    required_v_upsweep_bytes, required_v_upsweep_ptr_bytes);
+        required_upsweep_bytes += required_v_upsweep_bytes;
+        required_upsweep_ptr_bytes += required_v_upsweep_ptr_bytes;
+    }
 
     size_t required_bytes = std::max(required_bgen_bytes, required_upsweep_bytes);
     size_t required_ptr_bytes = std::max(required_bgen_ptr_bytes, required_upsweep_ptr_bytes);
@@ -292,89 +374,37 @@ H2OpusWorkspaceState hcompress_workspace(BasisTreeLevelData &u_level_data, Basis
     return ws_needed;
 }
 
+H2OpusWorkspaceState hcompress_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                                         HNodeTreeLevelData &hnode_level_data, std::vector<int> &diagonal_max_row_nodes,
+                                         std::vector<int> &diagonal_max_col_nodes,
+                                         HNodeTreeLevelData *offdiag_hnode_level_data,
+                                         std::vector<int> *offdiag_max_row_nodes,
+                                         std::vector<int> *offdiag_max_col_nodes, bool symmetric, int hw)
+{
+    return hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, diagonal_max_row_nodes,
+                                   diagonal_max_col_nodes, offdiag_hnode_level_data, offdiag_max_row_nodes,
+                                   offdiag_max_col_nodes, symmetric, NULL, NULL, hw);
+}
+
+H2OpusWorkspaceState hcompress_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                                         HNodeTreeLevelData &hnode_level_data, std::vector<int> &diagonal_max_nodes,
+                                         HNodeTreeLevelData *offdiag_hnode_level_data,
+                                         std::vector<int> *offdiag_max_nodes, bool symmetric, int hw)
+{
+    return hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, diagonal_max_nodes, diagonal_max_nodes,
+                                   offdiag_hnode_level_data, offdiag_max_nodes, offdiag_max_nodes, symmetric, NULL,
+                                   NULL, hw);
+}
+
 H2OpusWorkspaceState hcompress_get_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
                                              HNodeTreeLevelData &hnode_level_data, std::vector<int> &diagonal_max_nodes,
                                              HNodeTreeLevelData *offdiag_hnode_level_data,
                                              std::vector<int> *offdiag_max_nodes, bool symmetric,
                                              HcompressWorkspace &workspace, h2opusHandle_t h2opus_handle, int hw)
 {
-    h2opusWorkspace_t h2opus_ws = h2opus_handle->getWorkspace();
-    workspace.symmetric = symmetric;
-
-    // Allocate the workspace pointers from the handle
-    void *ws_entries_base = (void *)h2opus_ws->getData(hw);
-    void **ws_ptr_base = (void **)h2opus_ws->getPtrs(hw);
-
-    // Allocate the host vectors for the pointers to the projection tree levels
-    // and the new ranks for each level
-    workspace.u_upsweep.new_ranks.resize(u_level_data.depth, 0);
-    workspace.u_upsweep.T_hat.resize(u_level_data.depth);
-    workspace.u_upsweep.Z_hat.resize(u_level_data.depth);
-
-    if (!symmetric)
-    {
-        workspace.v_upsweep.new_ranks.resize(v_level_data.depth, 0);
-        workspace.v_upsweep.T_hat.resize(v_level_data.depth);
-        workspace.v_upsweep.Z_hat.resize(v_level_data.depth);
-    }
-
-    // Allocate Z_hat and T_hat for each basis
-    size_t required_u_proj_bytes = 0, required_u_weight_bytes = 0;
-    size_t required_v_proj_bytes = 0, required_v_weight_bytes = 0;
-
-    void *temp_ws_base = ws_entries_base;
-    hcompress_projection_tree_workspace(u_level_data, &workspace.u_upsweep, temp_ws_base, required_u_proj_bytes);
-    temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_u_proj_bytes);
-    if (!symmetric)
-    {
-        hcompress_projection_tree_workspace(v_level_data, &workspace.v_upsweep, temp_ws_base, required_v_proj_bytes);
-        temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_v_proj_bytes);
-    }
-    size_t required_proj_bytes = required_u_proj_bytes + required_v_proj_bytes;
-
-    // Only need one Z_hat, so we allocate the maximum of the two
-    hcompress_weight_tree_workspace(u_level_data, &workspace.u_upsweep, temp_ws_base, required_u_weight_bytes);
-    if (!symmetric)
-        hcompress_weight_tree_workspace(v_level_data, &workspace.v_upsweep, temp_ws_base, required_v_weight_bytes);
-    size_t required_weight_bytes = std::max(required_u_weight_bytes, required_v_weight_bytes);
-
-    temp_ws_base = (void *)((unsigned char *)temp_ws_base + required_weight_bytes);
-
-    // These are all temporary storage
-    size_t required_bgen_bytes, required_bgen_ptr_bytes;
-    size_t required_upsweep_bytes, required_upsweep_ptr_bytes;
-    size_t required_projection_bytes, required_projection_ptr_bytes;
-    size_t required_top_level_bytes, required_top_level_ptr_bytes;
-
-    hcompress_upsweep_workspace(u_level_data, temp_ws_base, ws_ptr_base, &(workspace.u_upsweep), required_upsweep_bytes,
-                                required_upsweep_ptr_bytes);
-
-    hcompress_generate_basis_workspace(hnode_level_data, diagonal_max_nodes, offdiag_hnode_level_data,
-                                       offdiag_max_nodes, u_level_data, temp_ws_base, ws_ptr_base,
-                                       &(workspace.optimal_bgen), required_bgen_bytes, required_bgen_ptr_bytes);
-
-    hcompress_hnode_projection_workspace(hnode_level_data, offdiag_hnode_level_data, &(workspace.projection),
-                                         temp_ws_base, ws_ptr_base, required_projection_bytes,
-                                         required_projection_ptr_bytes);
-
-    hcompress_project_top_level_workspace(u_level_data, &workspace.u_top_level, temp_ws_base, ws_ptr_base,
-                                          required_top_level_bytes, required_top_level_ptr_bytes);
-
-    size_t required_bytes = std::max(required_bgen_bytes, required_upsweep_bytes);
-    size_t required_ptr_bytes = std::max(required_bgen_ptr_bytes, required_upsweep_ptr_bytes);
-
-    required_bytes = std::max(required_bytes, required_projection_bytes);
-    required_ptr_bytes = std::max(required_ptr_bytes, required_projection_ptr_bytes);
-
-    required_bytes = std::max(required_bytes, required_top_level_bytes);
-    required_ptr_bytes = std::max(required_ptr_bytes, required_top_level_ptr_bytes);
-
-    required_bytes += required_proj_bytes + required_weight_bytes;
-
-    H2OpusWorkspaceState ws_needed;
-    ws_needed.setBytes(required_bytes, required_ptr_bytes, hw);
-
-    return ws_needed;
+    return hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, diagonal_max_nodes, diagonal_max_nodes,
+                                   offdiag_hnode_level_data, offdiag_max_nodes, offdiag_max_nodes, symmetric,
+                                   &workspace, h2opus_handle, hw);
 }
 
 template <int hw> H2OpusWorkspaceState hcompress_workspace_template(THMatrix<hw> &hmatrix)
@@ -386,9 +416,11 @@ template <int hw> H2OpusWorkspaceState hcompress_workspace_template(THMatrix<hw>
     BasisTreeLevelData &u_level_data = u_basis_tree.level_data;
     BasisTreeLevelData &v_level_data = v_basis_tree.level_data;
     HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
-    std::vector<int> &max_nodes = hmatrix.hnodes.bsn_row_data.max_nodes;
+    std::vector<int> &max_row_nodes = hmatrix.hnodes.bsn_row_data.max_nodes;
+    std::vector<int> &max_col_nodes = hmatrix.hnodes.bsn_col_data.max_nodes;
 
-    return hcompress_workspace(u_level_data, v_level_data, hnode_level_data, max_nodes, NULL, NULL, hmatrix.sym, hw);
+    return hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, max_row_nodes, max_col_nodes, NULL,
+                                   NULL, NULL, hmatrix.sym, NULL, NULL, hw);
 }
 
 template <int hw>
@@ -402,10 +434,11 @@ void hcompress_get_workspace_template(THMatrix<hw> &hmatrix, HcompressWorkspace 
     BasisTreeLevelData &v_level_data = v_basis_tree.level_data;
 
     HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
-    std::vector<int> &max_nodes = hmatrix.hnodes.bsn_row_data.max_nodes;
+    std::vector<int> &max_row_nodes = hmatrix.hnodes.bsn_row_data.max_nodes;
+    std::vector<int> &max_col_nodes = hmatrix.hnodes.bsn_col_data.max_nodes;
 
-    hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, max_nodes, NULL, NULL, hmatrix.sym, workspace,
-                            h2opus_handle, hw);
+    hcompress_get_workspace(u_level_data, v_level_data, hnode_level_data, max_row_nodes, max_col_nodes, NULL, NULL,
+                            NULL, hmatrix.sym, &workspace, h2opus_handle, hw);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

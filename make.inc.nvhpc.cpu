@@ -1,0 +1,36 @@
+# Host only configuration file for NVHPC (NVC++ compiler)
+# Uses variables from their modulefils
+# https://docs.nvidia.com/hpc-sdk/compilers/hpc-compilers-user-guide/#env-vars-use-mod-linux
+
+# NVHPC root dir
+ifneq ($(NVHPC_ROOT),)
+  NVHPC_DIR = $(NVHPC_ROOT)
+else
+  NVHPC_DIR = /opt/nvidia/hpc_sdk/Linux_x86_64/21.7
+endif
+
+# C++ compiler
+
+# NVHPC has distributed memory support
+H2OPUS_USE_MPI = 1
+
+# Defaults to OpenMPI-3.1.5 (fine if not using CUDA_AWARE_MPI)
+# use OpenMPI-4.0.5 instead if you want to run with CUDA_AWARE_MPI
+# $(NVHPC_DIR)/comm_libs/openmpi4/openmpi-4.0.5
+MPI_DIR = $(OPAL_PREFIX)
+CXX = $(MPI_DIR)/bin/mpicxx
+
+# mpicxx wrapper uses nvc++
+CXXFLAGS = -Wall -mp=multicore
+
+# Enable flops reporting
+CXXCPPFLAGS = -DH2OPUS_PROFILING_ENABLED
+
+# Flag H2OPUS we are using NVOMP layer for host threading
+H2OPUS_USE_NVOMP = 1
+
+# NVHPC (PGI) provides BLAS/LAPACK
+BLAS_LIBS = -Wl,-rpath,$(NVHPC_DIR)/compilers/lib -L$(NVHPC_DIR)/compilers/lib -llapack -lblas -lnvf -lrt
+
+# Thrust include
+THRUST_INCDIR = $(NVHPC_DIR)/cuda/include

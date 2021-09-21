@@ -32,8 +32,8 @@ inline H2Opus_Real sampler_norm(HMatrixSampler *sampler, int n, int samples, h2o
 
     H2Opus_Real norm = 0;
     RealVector vec_x1, vec_x2;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
 
@@ -63,10 +63,10 @@ inline H2Opus_Real sampler_1_norm(HMatrixSampler *sampler, int n, int samples, h
 
     RealVector vec_x, vec_y, vec_e, vec_z;
 
-    resizeThrustArray(vec_x, n);
-    resizeThrustArray(vec_y, n);
-    resizeThrustArray(vec_e, n);
-    resizeThrustArray(vec_z, n);
+    vec_x.resize(n);
+    vec_y.resize(n);
+    vec_e.resize(n);
+    vec_z.resize(n);
 
     H2Opus_Real *x = vec_ptr(vec_x), *y = vec_ptr(vec_y);
     H2Opus_Real *e = vec_ptr(vec_e), *z = vec_ptr(vec_z);
@@ -113,8 +113,8 @@ inline H2Opus_Real hmatrix_norm(THMatrix<hw> &hmatrix, int samples, h2opusHandle
     int n = hmatrix.n;
     H2Opus_Real norm = 0;
     RealVector vec_x1, vec_x2;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
 
@@ -148,8 +148,8 @@ inline H2Opus_Real sampler_difference(HMatrixSampler *sampler, THMatrix<hw> &hma
     int n = hmatrix.n;
 
     RealVector vec_x1, vec_x2;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
 
@@ -185,9 +185,9 @@ inline H2Opus_Real inverse_error(THMatrix<hw> &hmatrix, THMatrix<hw> &inverse, i
     int n = hmatrix.n;
 
     RealVector vec_x1, vec_x2, vec_x3;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
-    resizeThrustArray(vec_x3, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
+    vec_x3.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2), *x3 = vec_ptr(vec_x3);
 
@@ -225,9 +225,9 @@ inline H2Opus_Real pseudo_inverse_error(THMatrix<hw> &hmatrix, THMatrix<hw> &pse
     int n = hmatrix.n;
 
     RealVector vec_x1, vec_x2, vec_x3;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
-    resizeThrustArray(vec_x3, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
+    vec_x3.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
     H2Opus_Real *x3 = vec_ptr(vec_x3);
@@ -271,9 +271,9 @@ inline H2Opus_Real pseudo_inverse_error(HMatrixSampler *sampler, THMatrix<hw> &p
     int n = pseudo_inverse.n;
 
     RealVector vec_x1, vec_x2, vec_x3;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
-    resizeThrustArray(vec_x3, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
+    vec_x3.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
     H2Opus_Real *x3 = vec_ptr(vec_x3);
@@ -316,8 +316,8 @@ inline H2Opus_Real product_norm(THMatrix<hw> &hmatrix, THMatrix<hw> &inverse, in
     int n = inverse.n;
 
     RealVector vec_x1, vec_x2;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
 
@@ -353,8 +353,8 @@ inline H2Opus_Real product_norm(HMatrixSampler *sampler, THMatrix<hw> &inverse, 
     int n = inverse.n;
 
     RealVector vec_x1, vec_x2;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2);
 
@@ -390,9 +390,9 @@ inline H2Opus_Real inverse_error(HMatrixSampler *sampler, THMatrix<hw> &inverse,
     int n = inverse.n;
 
     RealVector vec_x1, vec_x2, vec_x3;
-    resizeThrustArray(vec_x1, n);
-    resizeThrustArray(vec_x2, n);
-    resizeThrustArray(vec_x3, n);
+    vec_x1.resize(n);
+    vec_x2.resize(n);
+    vec_x3.resize(n);
 
     H2Opus_Real *x1 = vec_ptr(vec_x1), *x2 = vec_ptr(vec_x2), *x3 = vec_ptr(vec_x3);
 

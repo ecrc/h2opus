@@ -49,14 +49,14 @@ struct HARA_ZeroSample_Predicate
     }
 };
 
-template <class T> struct HARA_SvecCount_Functor
+template <class T, class R_prec> struct HARA_SvecCount_Functor
 {
     T **U_ptrs, **Y_ptrs;
-    double *diag_R, tol;
+    R_prec *diag_R, tol;
     int r, BS, *ldu_batch;
     int *block_ranks, *node_ranks, *small_vectors;
 
-    HARA_SvecCount_Functor(int *block_ranks, int *node_ranks, int *small_vectors, double *diag_R, int r, double tol,
+    HARA_SvecCount_Functor(int *block_ranks, int *node_ranks, int *small_vectors, R_prec *diag_R, int r, R_prec tol,
                            int BS, T **Y_ptrs, T **U_ptrs, int *ldu_batch)
     {
         this->block_ranks = block_ranks;
@@ -84,7 +84,7 @@ template <class T> struct HARA_SvecCount_Functor
             return;
         }
 
-        double *diag_op = diag_R + op_index * BS;
+        R_prec *diag_op = diag_R + op_index * BS;
         int ldu = ldu_batch[op_index];
         int current_rank = node_ranks[op_index];
 
@@ -141,13 +141,13 @@ inline int hara_util_set_batch_samples(int *op_samples, int *small_vectors, int 
     return converged;
 }
 
-template <class T, int hw>
-inline void hara_util_svec_count_batch(int *block_ranks, int *node_ranks, int *small_vectors, double *diag_R, int r,
-                                       double tol, int BS, T **Y_ptrs, T **U_ptrs, int *ldu_batch, int num_ops,
+template <class T, class R_prec, int hw>
+inline void hara_util_svec_count_batch(int *block_ranks, int *node_ranks, int *small_vectors, R_prec *diag_R, int r,
+                                       R_prec tol, int BS, T **Y_ptrs, T **U_ptrs, int *ldu_batch, int num_ops,
                                        h2opusComputeStream_t stream)
 {
-    HARA_SvecCount_Functor<T> svec_count_functor(block_ranks, node_ranks, small_vectors, diag_R, r, tol, BS, Y_ptrs,
-                                                 U_ptrs, ldu_batch);
+    HARA_SvecCount_Functor<T, R_prec> svec_count_functor(block_ranks, node_ranks, small_vectors, diag_R, r, tol, BS,
+                                                         Y_ptrs, U_ptrs, ldu_batch);
 
     thrust::for_each(ThrustRuntime<hw>::get(stream), thrust::counting_iterator<int>(0),
                      thrust::counting_iterator<int>(num_ops), svec_count_functor);

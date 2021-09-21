@@ -1,12 +1,9 @@
 include ../../lib/h2opus/make.inc
 
-################################################################################
-# Regular C files
 OBJDIR := obj
 OBJ_LIST := test_hara.o
 OBJS := $(addprefix $(OBJDIR)/,$(OBJ_LIST))
 
-################################################################################
 # Target rules
 all: build
 
@@ -22,4 +19,3 @@ clean:
 	rm -f test_hara $(OBJS)
 
 clobber: clean
-################################################################################

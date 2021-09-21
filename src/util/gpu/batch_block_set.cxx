@@ -44,7 +44,7 @@ __global__ void batchBlockSetDiagonalKernel(DimType rows_batch, DimType cols_bat
     }
 }
 
-template <class T, class DimType>
+template <class T, class DimType, bool upper_only>
 __global__ void batchBlockSetZeroKernel(DimType rows_batch, DimType cols_batch, T **block_ptrs, DimType ld_batch,
                                         int ops)
 {
@@ -74,7 +74,8 @@ __global__ void batchBlockSetZeroKernel(DimType rows_batch, DimType cols_batch, 
 #pragma unroll
     for (int j = 0; j < COLS_PER_THREAD; j++)
         if (j + col_index < cols)
-            block_ptr[j * ld] = 0;
+            if (!upper_only || (upper_only && row_index < j + col_index))
+                block_ptr[j * ld] = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +114,7 @@ void batchBlockSetDiagonalT(cudaStream_t stream, DimType rows_batch, DimType col
     }
 }
 
-template <class T, class DimType>
+template <class T, class DimType, bool upper_only>
 void batchBlockSetZeroT(cudaStream_t stream, DimType rows_batch, DimType cols_batch, int max_rows, int max_cols,
                         T **block_ptrs, DimType ld_batch, int batchCount)
 {
@@ -137,8 +138,8 @@ void batchBlockSetZeroT(cudaStream_t stream, DimType rows_batch, DimType cols_ba
         DimType ld_sub_batch = advanceOperationDim(ld_batch, batch_start);
         T **block_sub_ptrs = block_ptrs + batch_start;
 
-        batchBlockSetZeroKernel<T, DimType><<<dimGrid, dimBlock, 0, stream>>>(rows_sub_batch, cols_sub_batch,
-                                                                              block_sub_ptrs, ld_sub_batch, batch_size);
+        batchBlockSetZeroKernel<T, DimType, upper_only><<<dimGrid, dimBlock, 0, stream>>>(
+            rows_sub_batch, cols_sub_batch, block_sub_ptrs, ld_sub_batch, batch_size);
 
         gpuErrchk(cudaGetLastError());
 
@@ -199,22 +200,34 @@ void batchBlockSetIdentity(cudaStream_t stream, int *rows_batch, int *cols_batch
 
 void batchBlockSetZero(cudaStream_t stream, int rows, int cols, float **block_ptrs, int ld, int ops)
 {
-    batchBlockSetZeroT<float, int>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
+    batchBlockSetZeroT<float, int, false>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
 }
 
 void batchBlockSetZero(cudaStream_t stream, int rows, int cols, double **block_ptrs, int ld, int ops)
 {
-    batchBlockSetZeroT<double, int>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
+    batchBlockSetZeroT<double, int, false>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
 }
 
 void batchBlockSetZero(cudaStream_t stream, int *rows_batch, int *cols_batch, int max_rows, int max_cols,
                        float **block_ptrs, int *ld_batch, int ops)
 {
-    batchBlockSetZeroT<float, int *>(stream, rows_batch, cols_batch, max_rows, max_cols, block_ptrs, ld_batch, ops);
+    batchBlockSetZeroT<float, int *, false>(stream, rows_batch, cols_batch, max_rows, max_cols, block_ptrs, ld_batch,
+                                            ops);
 }
 
 void batchBlockSetZero(cudaStream_t stream, int *rows_batch, int *cols_batch, int max_rows, int max_cols,
                        double **block_ptrs, int *ld_batch, int ops)
 {
-    batchBlockSetZeroT<double, int *>(stream, rows_batch, cols_batch, max_rows, max_cols, block_ptrs, ld_batch, ops);
+    batchBlockSetZeroT<double, int *, false>(stream, rows_batch, cols_batch, max_rows, max_cols, block_ptrs, ld_batch,
+                                             ops);
+}
+
+void batchBlockSetUpperZero(cudaStream_t stream, int rows, int cols, float **block_ptrs, int ld, int ops)
+{
+    batchBlockSetZeroT<float, int, true>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
+}
+
+void batchBlockSetUpperZero(cudaStream_t stream, int rows, int cols, double **block_ptrs, int ld, int ops)
+{
+    batchBlockSetZeroT<double, int, true>(stream, rows, cols, rows, cols, block_ptrs, ld, ops);
 }

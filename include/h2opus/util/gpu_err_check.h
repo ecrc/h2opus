@@ -9,6 +9,7 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <cusparse.h>
+#include <cusolverDn.h>
 #include <kblas.h>
 #include <stdio.h>
 
@@ -16,7 +17,7 @@
     {                                                                                                                  \
         gpuAssert((ans), __FILE__, __LINE__);                                                                          \
     }
-__device__ __host__ inline void gpuAssert(cudaError_t code, const char *file, int line)
+inline void gpuAssert(cudaError_t code, const char *file, int line)
 {
     if (code != cudaSuccess)
         printf("GPUassert: %s(%d) %s %d\n", cudaGetErrorString(code), (int)code, file, line);
@@ -36,7 +37,7 @@ inline void gpuKblasAssert(int code, const char *file, int line)
     }
 }
 
-__device__ __host__ inline const char *h2opus_cublasGetErrorString(cublasStatus_t error)
+inline const char *h2opus_cublasGetErrorString(cublasStatus_t error)
 {
     switch (error)
     {
@@ -61,7 +62,7 @@ __device__ __host__ inline const char *h2opus_cublasGetErrorString(cublasStatus_
     }
 }
 
-__device__ __host__ inline const char *h2opus_cusparseGetErrorString(cusparseStatus_t error)
+inline const char *h2opus_cusparseGetErrorString(cusparseStatus_t error)
 {
     switch (error)
     {
@@ -92,21 +93,44 @@ __device__ __host__ inline const char *h2opus_cusparseGetErrorString(cusparseSta
     {                                                                                                                  \
         gpuCublasAssert((ans), __FILE__, __LINE__);                                                                    \
     }
-__device__ __host__ inline void gpuCublasAssert(cublasStatus_t code, const char *file, int line)
+inline void gpuCublasAssert(cublasStatus_t code, const char *file, int line)
 {
     if (code != CUBLAS_STATUS_SUCCESS)
-        printf("GPUassert: %s %s %d\n", h2opus_cublasGetErrorString(code), file, line);
+        printf("cuBlasAssert: %s %s %d\n", h2opus_cublasGetErrorString(code), file, line);
 }
 
 #define gpuCusparseErrchk(ans)                                                                                         \
     {                                                                                                                  \
         gpuCusparseAssert((ans), __FILE__, __LINE__);                                                                  \
     }
-__device__ __host__ inline void gpuCusparseAssert(cusparseStatus_t code, const char *file, int line)
+inline void gpuCusparseAssert(cusparseStatus_t code, const char *file, int line)
 {
     if (code != CUSPARSE_STATUS_SUCCESS)
-        printf("GPUassert: %s %s %d\n", h2opus_cusparseGetErrorString(code), file, line);
+        printf("cuSparseAssert: %s %s %d\n", h2opus_cusparseGetErrorString(code), file, line);
 }
+
+#define gpuCusolverErrchk(ans)                                                                                         \
+    {                                                                                                                  \
+        gpuCusolverAssert((ans), __FILE__, __LINE__);                                                                  \
+    }
+inline void gpuCusolverAssert(cusolverStatus_t code, const char *file, int line)
+{
+    if (code != CUSOLVER_STATUS_SUCCESS)
+        printf("cuSolverAssert: %d %s %d\n", code, file, line);
+}
+
+inline void checkDriverError(CUresult result, const char *file, unsigned line)
+{
+    if (result != CUDA_SUCCESS)
+    {
+        const char *error_string = NULL;
+        cuGetErrorString(result, &error_string);
+        printf("Driver error %d at line %d of file %s: %s\n", (int)result, line, file, error_string);
+        exit(-1);
+    }
+}
+
+#define gpuDriverErrchk(x) checkDriverError(x, __FILE__, __LINE__);
 
 #else
 

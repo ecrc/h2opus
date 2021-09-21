@@ -37,11 +37,12 @@ void hlru_update_dense_blocks_global(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_b
         vec_ptr(v_basis_tree.node_len), num_dense_leaves, stream);
 
     // M += U * V^T
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array), vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim,
-        dense_dim, rank, (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(U_ptrs), vec_ptr(ldu_array),
-        (const H2Opus_Real **)vec_ptr(V_ptrs), vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(dense_ptrs),
-        vec_ptr(ldm_array), num_dense_leaves));
+    check_kblas_error((
+        H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array),
+                                              vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim, dense_dim, rank,
+                                              (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(U_ptrs), vec_ptr(ldu_array),
+                                              (const H2Opus_Real **)vec_ptr(V_ptrs), vec_ptr(ldv_array), (H2Opus_Real)1,
+                                              vec_ptr(dense_ptrs), vec_ptr(ldm_array), num_dense_leaves));
 }
 
 template <int hw>
@@ -70,8 +71,10 @@ void hlru_update_coupling_matrices_global(THNodeTree<hw> &hnodes, H2Opus_Real s,
 
         int new_rank = update_rank + level_rank;
 
-        RealVector old_coupling_level = hnodes.rank_leaf_mem[level];
-        hnodes.rank_leaf_mem[level] = RealVector(level_nodes * new_rank * new_rank, 0);
+        RealVector old_coupling_level;
+        copyVector(old_coupling_level, hnodes.rank_leaf_mem[level]);
+        hnodes.rank_leaf_mem[level].resize(level_nodes * new_rank * new_rank);
+        initVector(hnodes.rank_leaf_mem[level], (H2Opus_Real)0, stream);
 
         // Copy the original data into the appropriate sub-block of the new coupling matrices
         generateArrayOfPointers(vec_ptr(old_coupling_level), vec_ptr(original_node_ptrs), level_rank * level_rank,
@@ -79,9 +82,10 @@ void hlru_update_coupling_matrices_global(THNodeTree<hw> &hnodes, H2Opus_Real s,
         generateArrayOfPointers(vec_ptr(hnodes.rank_leaf_mem[level]), vec_ptr(new_node_ptrs), new_rank * new_rank,
                                 level_nodes, stream, hw);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-            stream, level_rank, level_rank, vec_ptr(new_node_ptrs), 0, 0, new_rank, vec_ptr(original_node_ptrs), 0, 0,
-            level_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, level_rank, level_rank,
+                                                                      vec_ptr(new_node_ptrs), 0, 0, new_rank,
+                                                                      vec_ptr(original_node_ptrs), 0, 0, level_rank,
+                                                                      level_nodes));
 
         // Set the lower right block of the new coupling matrices to the scaled identity
         hlru_offset_pointer_array<H2Opus_Real, hw>(vec_ptr(new_node_ptrs), new_rank, level_rank, level_rank,
@@ -116,8 +120,10 @@ void hlru_update_transfer_matrices_global(TBasisTree<hw> &basis_tree, int update
 
         int new_rows = rows + update_rank, new_cols = cols + update_rank;
 
-        RealVector old_transfer_level = basis_tree.trans_mem[level];
-        basis_tree.trans_mem[level] = RealVector(level_nodes * new_rows * new_cols, 0);
+        RealVector old_transfer_level;
+        copyVector(old_transfer_level, basis_tree.trans_mem[level]);
+        basis_tree.trans_mem[level].resize(level_nodes * new_rows * new_cols);
+        initVector(basis_tree.trans_mem[level], (H2Opus_Real)0, stream);
 
         // Copy the original blocks
         generateArrayOfPointers(vec_ptr(old_transfer_level), vec_ptr(original_node_ptrs), rows * cols, level_nodes,
@@ -163,8 +169,10 @@ void hlru_sym_update_basis_leaves_global(TBasisTree<hw> &basis_tree, H2Opus_Real
     IntVector rows_array(num_leaves), cols_array(num_leaves);
     IntVector ld_src_array(num_leaves), ld_dest_array(num_leaves);
 
-    RealVector old_leaves = basis_tree.basis_mem;
-    basis_tree.basis_mem = RealVector(num_leaves * leaf_size * new_rank, 0);
+    RealVector old_leaves;
+    copyVector(old_leaves, basis_tree.basis_mem);
+    basis_tree.basis_mem.resize(num_leaves * leaf_size * new_rank);
+    initVector(basis_tree.basis_mem, (H2Opus_Real)0, stream);
 
     // First copy the original leaves
     generateArrayOfPointers(vec_ptr(old_leaves), vec_ptr(original_basis_ptrs), leaf_size * leaf_rank, num_leaves,
@@ -176,7 +184,7 @@ void hlru_sym_update_basis_leaves_global(TBasisTree<hw> &basis_tree, H2Opus_Real
                                                                   0, 0, leaf_size, vec_ptr(original_basis_ptrs), 0, 0,
                                                                   leaf_size, num_leaves));
 
-    // Genereate pointers for the flagged nodes
+    // Generate pointers for the flagged nodes
     fillArray(vec_ptr(ld_dest_array), num_leaves, leaf_size, stream, hw);
     fillArray(vec_ptr(ld_src_array), num_leaves, lda, stream, hw);
 
@@ -186,9 +194,10 @@ void hlru_sym_update_basis_leaves_global(TBasisTree<hw> &basis_tree, H2Opus_Real
         leaf_rank, update_rank, num_leaves, stream);
 
     // Copy over the update blocks
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-        stream, vec_ptr(rows_array), vec_ptr(cols_array), leaf_size, update_rank, vec_ptr(updated_basis_ptrs),
-        vec_ptr(ld_dest_array), vec_ptr(update_ptrs), vec_ptr(ld_src_array), num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, vec_ptr(rows_array), vec_ptr(cols_array),
+                                                                  leaf_size, update_rank, vec_ptr(updated_basis_ptrs),
+                                                                  vec_ptr(ld_dest_array), vec_ptr(update_ptrs),
+                                                                  vec_ptr(ld_src_array), num_leaves));
 }
 
 template <int hw>

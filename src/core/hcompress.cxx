@@ -8,6 +8,14 @@
 #include <h2opus/util/thrust_wrappers.h>
 #include <h2opus/util/timer.h>
 
+#ifdef H2OPUS_HCOMPRESS_USE_CHOLESKY_QR
+#define Z_TRANS_MODE_1 H2Opus_NoTrans
+#define Z_TRANS_MODE_2 H2Opus_Trans
+#else
+#define Z_TRANS_MODE_1 H2Opus_Trans
+#define Z_TRANS_MODE_2 H2Opus_NoTrans
+#endif
+
 // Leaves are referred to as U here
 template <int hw>
 int hcompress_compressed_basis_leaf_rank_template(TBasisTree<hw> &basis_tree, H2Opus_Real eps,
@@ -33,9 +41,10 @@ int hcompress_compressed_basis_leaf_rank_template(TBasisTree<hw> &basis_tree, H2
     // Clear UZ_data
     fillArray(UZ_data, num_leaves * leaf_size * leaf_rank, 0, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_Trans, leaf_size, leaf_rank, leaf_rank, alpha, (const H2Opus_Real **)ptr_U,
-        leaf_size, (const H2Opus_Real **)ptr_Z, leaf_rank, beta, ptr_UZ, leaf_size, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, Z_TRANS_MODE_1, leaf_size,
+                                                             leaf_rank, leaf_rank, alpha, (const H2Opus_Real **)ptr_U,
+                                                             leaf_size, (const H2Opus_Real **)ptr_Z, leaf_rank, beta,
+                                                             ptr_UZ, leaf_size, num_leaves));
 
     // Calculate a basis Q for the approximation of UZ using column pivoted QR
     // UZ is overwritten by Q
@@ -57,8 +66,6 @@ template <int hw>
 void hcompress_truncate_basis_leaves_template(TBasisTree<hw> &basis_tree, int new_rank,
                                               HcompressUpsweepWorkspace &workspace, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     BasisTreeLevelData &level_data = basis_tree.level_data;
     size_t num_leaves = basis_tree.basis_leaves;
     int leaf_size = basis_tree.leaf_size;
@@ -73,7 +80,6 @@ void hcompress_truncate_basis_leaves_template(TBasisTree<hw> &basis_tree, int ne
     H2Opus_Real **ptr_U = workspace.ptr_A, **ptr_Z = workspace.ptr_B, **ptr_UZ = workspace.ptr_C;
     H2Opus_Real *UZ_data = workspace.UZ_data;
     H2Opus_Real **ptr_tau = workspace.ptr_D;
-
     check_kblas_error(
         (H2OpusBatched<H2Opus_Real, hw>::orgqr)(stream, leaf_size, new_rank, ptr_UZ, leaf_size, ptr_tau, num_leaves));
 
@@ -83,12 +89,14 @@ void hcompress_truncate_basis_leaves_template(TBasisTree<hw> &basis_tree, int ne
     fillArray(T_hat_leaves, leaf_rank * leaf_rank * num_leaves, 0, stream, hw);
     generateArrayOfPointers(T_hat_leaves, ptr_T, leaf_rank * leaf_rank, num_leaves, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_Trans, H2Opus_NoTrans, max_rank, leaf_rank, leaf_size, alpha, (const H2Opus_Real **)ptr_UZ,
-        leaf_size, (const H2Opus_Real **)ptr_U, leaf_size, beta, ptr_T, leaf_rank, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, max_rank, leaf_rank,
+                                                             leaf_size, alpha, (const H2Opus_Real **)ptr_UZ, leaf_size,
+                                                             (const H2Opus_Real **)ptr_U, leaf_size, beta, ptr_T,
+                                                             leaf_rank, num_leaves));
 
     // Now copy over the truncated leaf data
-    basis_tree.basis_mem = RealVector(num_leaves * leaf_size * new_rank, 0);
+    basis_tree.basis_mem.resize(num_leaves * leaf_size * new_rank);
+    initVector(basis_tree.basis_mem, (H2Opus_Real)0, stream);
     U = vec_ptr(basis_tree.basis_mem);
 
     check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, leaf_size, new_rank, U, 0, 0, leaf_size,
@@ -121,7 +129,6 @@ int hcompress_compressed_basis_level_rank_template(TBasisTree<hw> &basis_tree, H
     int level_rank = level_data.getLevelRank(level);
     size_t num_nodes = level_data.getLevelSize(level);
     size_t level_start = level_data.getLevelStart(level);
-
     // Child level info
     int child_rank = level_data.getLevelRank(level + 1);
     size_t num_child_nodes = level_data.getLevelSize(level + 1);
@@ -148,10 +155,11 @@ int hcompress_compressed_basis_level_rank_template(TBasisTree<hw> &basis_tree, H
                                                      basis_tree.head_ptr(), basis_tree.next_ptr(), num_nodes, stream);
 
     // Now execute the batch gemm
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_NoTrans, child_new_rank, level_rank, child_rank, alpha,
-        (const H2Opus_Real **)workspace.ptr_A, child_rank, (const H2Opus_Real **)workspace.ptr_B, child_rank, beta,
-        workspace.ptr_C, te_rows, num_child_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, child_new_rank,
+                                                             level_rank, child_rank, alpha,
+                                                             (const H2Opus_Real **)workspace.ptr_A, child_rank,
+                                                             (const H2Opus_Real **)workspace.ptr_B, child_rank, beta,
+                                                             workspace.ptr_C, te_rows, num_child_nodes));
 
     ////////////////////////////////////////////////////////////////
     // Apply the weights of each basis node to the stacked TE nodes - ie UZ = TE * Z'
@@ -161,9 +169,10 @@ int hcompress_compressed_basis_level_rank_template(TBasisTree<hw> &basis_tree, H
     generateArrayOfPointers(Z_hat_level, ptr_Z, level_rank * level_rank, num_nodes, stream, hw);
     generateArrayOfPointers(UZ_data, ptr_UZ, te_rows * level_rank, num_nodes, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_Trans, te_rows, level_rank, level_rank, alpha, (const H2Opus_Real **)ptr_TE,
-        te_rows, (const H2Opus_Real **)ptr_Z, level_rank, beta, ptr_UZ, te_rows, num_nodes));
+    check_kblas_error((
+        H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, Z_TRANS_MODE_1, te_rows, level_rank, level_rank,
+                                              alpha, (const H2Opus_Real **)ptr_TE, te_rows, (const H2Opus_Real **)ptr_Z,
+                                              level_rank, beta, ptr_UZ, te_rows, num_nodes));
 
     // Get new approximate basis Q for UZ - overwrites UZ
     H2Opus_Real *tau_data = workspace.tau_data, **ptr_tau = workspace.ptr_D;
@@ -181,10 +190,12 @@ template <int hw>
 void hcompress_truncate_basis_level_template(TBasisTree<hw> &basis_tree, int new_rank, int level,
                                              HcompressUpsweepWorkspace &workspace, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     if (new_rank == 0)
+    {
+        basis_tree.trans_mem[level + 1].resize(0);
+        workspace.new_ranks[level] = 0;
         return;
+    }
 
     BasisTreeLevelData &level_data = basis_tree.level_data;
 
@@ -203,10 +214,8 @@ void hcompress_truncate_basis_level_template(TBasisTree<hw> &basis_tree, int new
     int level_rank = level_data.getLevelRank(level);
     size_t num_nodes = level_data.getLevelSize(level);
     size_t level_start = level_data.getLevelStart(level);
-    int max_rank = std::min(level_rank, te_rows);
 
     // Child level info
-    int child_rank = level_data.getLevelRank(level + 1);
     size_t num_child_nodes = level_data.getLevelSize(level + 1);
     size_t child_level_start = level_data.getLevelStart(level + 1);
 
@@ -219,24 +228,28 @@ void hcompress_truncate_basis_level_template(TBasisTree<hw> &basis_tree, int new
     H2Opus_Real **T_ptrs = workspace.ptr_D;
     generateArrayOfPointers(T_hat_level, T_ptrs, level_rank * level_rank, num_nodes, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_Trans, H2Opus_NoTrans, max_rank, level_rank, te_rows, alpha, (const H2Opus_Real **)ptr_UZ,
-        te_rows, (const H2Opus_Real **)ptr_TE, te_rows, beta, T_ptrs, level_rank, num_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, new_rank, level_rank,
+                                                             te_rows, alpha, (const H2Opus_Real **)ptr_UZ, te_rows,
+                                                             (const H2Opus_Real **)ptr_TE, te_rows, beta, T_ptrs,
+                                                             level_rank, num_nodes));
 
     ////////////////////////////////////////////////////////////////
     // Resize original array and copy over the truncated transfer matrices
     ////////////////////////////////////////////////////////////////
-    basis_tree.trans_mem[level + 1] = RealVector(num_child_nodes * child_new_rank * new_rank, 0);
+    basis_tree.trans_mem[level + 1].resize(num_child_nodes * child_new_rank * new_rank);
+    H2Opus_Real *transfer_level = vec_ptr(basis_tree.trans_mem[level + 1]);
+    initVector(basis_tree.trans_mem[level + 1], (H2Opus_Real)0, stream);
 
     // First marhsal the pointers...
     H2Opus_Real **ptr_E = workspace.ptr_D;
     hcompress_copyBlock_marshal_batch<H2Opus_Real, hw>(
-        vec_ptr(basis_tree.trans_mem[level + 1]), UZ_data, ptr_E, ptr_UZ, child_new_rank, level_rank, new_rank,
-        child_level_start, level_start, max_children, basis_tree.head_ptr(), basis_tree.next_ptr(), num_nodes, stream);
+        transfer_level, UZ_data, ptr_E, ptr_UZ, child_new_rank, level_rank, new_rank, child_level_start, level_start,
+        max_children, basis_tree.head_ptr(), basis_tree.next_ptr(), num_nodes, stream);
 
     // ...and then copy
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-        stream, child_new_rank, new_rank, ptr_E, 0, 0, child_new_rank, ptr_UZ, 0, 0, te_rows, num_child_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, child_new_rank, new_rank, ptr_E, 0, 0,
+                                                                  child_new_rank, ptr_UZ, 0, 0, te_rows,
+                                                                  num_child_nodes));
 
     workspace.new_ranks[level] = new_rank;
 }
@@ -275,10 +288,47 @@ void hcompress_truncate_basis(TBasisTree<hw> &basis_tree, H2Opus_Real eps, Hcomp
 }
 
 template <int hw>
-void hcompress_appyly_weight_packet(TBasisTree<hw> &basis_tree, HcompressUpsweepWorkspace &workspace,
+void hcompress_truncate_basis(TBasisTree<hw> &u_basis_tree, TBasisTree<hw> &v_basis_tree, H2Opus_Real eps,
+                              HcompressUpsweepWorkspace &u_workspace, HcompressUpsweepWorkspace &v_workspace,
+                              h2opusComputeStream_t stream)
+{
+    BasisTreeLevelData &u_level_data = u_basis_tree.level_data;
+    BasisTreeLevelData &v_level_data = v_basis_tree.level_data;
+
+    int num_levels = u_basis_tree.depth;
+    int stop_level = u_level_data.nested_root_level;
+
+    // Compress the leaves
+    int u_leaf_new_rank = hcompress_compressed_basis_leaf_rank_template<hw>(u_basis_tree, eps, u_workspace, stream);
+    int v_leaf_new_rank = hcompress_compressed_basis_leaf_rank_template<hw>(v_basis_tree, eps, v_workspace, stream);
+    int leaf_new_rank = std::max(u_leaf_new_rank, v_leaf_new_rank);
+    hcompress_truncate_basis_leaves_template<hw>(u_basis_tree, leaf_new_rank, u_workspace, stream);
+    hcompress_truncate_basis_leaves_template<hw>(v_basis_tree, leaf_new_rank, v_workspace, stream);
+
+    // Now sweep up the tree
+    for (int level = num_levels - 2; level >= stop_level; level--)
+    {
+        int u_level_new_rank =
+            hcompress_compressed_basis_level_rank_template<hw>(u_basis_tree, eps, level, u_workspace, stream);
+        int v_level_new_rank =
+            hcompress_compressed_basis_level_rank_template<hw>(v_basis_tree, eps, level, v_workspace, stream);
+        int level_new_rank = std::max(u_level_new_rank, v_level_new_rank);
+        hcompress_truncate_basis_level_template<hw>(u_basis_tree, level_new_rank, level, u_workspace, stream);
+        hcompress_truncate_basis_level_template<hw>(v_basis_tree, level_new_rank, level, v_workspace, stream);
+    }
+
+    // Copy over the ranks above the top level
+    for (int i = 0; i < stop_level; i++)
+    {
+        u_workspace.new_ranks[i] = u_level_data.getLevelRank(i);
+        v_workspace.new_ranks[i] = v_level_data.getLevelRank(i);
+    }
+}
+
+template <int hw>
+void hcompress_appyly_weight_packet(BasisTreeLevelData &basis_level_data, HcompressUpsweepWorkspace &workspace,
                                     TWeightAccelerationPacket<hw> &weight_packet, h2opusComputeStream_t stream)
 {
-    BasisTreeLevelData &basis_level_data = basis_tree.level_data;
     int top_level = basis_level_data.nested_root_level;
     assert(top_level >= weight_packet.level);
 
@@ -308,10 +358,9 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
                                                BSNPointerDirection direction, TBasisTree<hw> &basis_tree,
                                                HcompressUpsweepWorkspace &upsweep_workspace,
                                                HcompressOptimalBGenWorkspace &bgen_workspace, int start_level,
-                                               h2opusComputeStream_t stream)
+                                               H2Opus_Real eps, h2opusComputeStream_t stream)
 {
     typedef typename THNodeTree<hw>::HNodeTreeBSNData BSNData;
-    // typedef typename VectorContainer<hw, H2Opus_Real>::type  RealVector;
 
     HNodeTreeLevelData &hnode_level_data = hnodes.level_data;
     BasisTreeLevelData &basis_level_data = basis_tree.level_data;
@@ -372,13 +421,14 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
         std::vector<int> &cached_node_ptrs = bsn_data.cached_coupling_ptrs[level];
 
         size_t start_index = 0;
-        size_t increment = std::min((size_t)COMPRESSION_BASIS_GEN_MAX_NODES, level_rows);
+        size_t increment = std::min((size_t)H2OPUS_COMPRESSION_BASIS_GEN_MAX_NODES, level_rows);
 
         fillArray(stacked_node_ld, increment, ld_ZE, stream, hw);
 
         generateArrayOfPointers(stacked_node_data, stacked_node_ptrs, ld_ZE * level_rank, increment, stream, hw);
+#ifndef H2OPUS_HCOMPRESS_USE_CHOLESKY_QR
         generateArrayOfPointers(stacked_tau_data, stacked_node_tau_ptrs, level_rank, increment, stream, hw);
-
+#endif
         size_t batch_index = 0;
         while (start_index != level_rows)
         {
@@ -398,10 +448,11 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
                 ptr_ZE, stacked_node_data, ptr_Z, Z_hat_parent_level, ptr_E, transfer_level, basis_tree.parent_ptr(),
                 parent_level_start, level_start, start_index, ld_ZE, parent_rank, level_rank, batch_size, stream);
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-                stream, H2Opus_NoTrans, H2Opus_Trans, parent_rank, level_rank, parent_rank, (H2Opus_Real)1,
-                (const H2Opus_Real **)ptr_Z, parent_rank, (const H2Opus_Real **)ptr_E, level_rank, (H2Opus_Real)0,
-                ptr_ZE, ld_ZE, batch_size));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, Z_TRANS_MODE_2, H2Opus_Trans, parent_rank,
+                                                                     level_rank, parent_rank, (H2Opus_Real)1,
+                                                                     (const H2Opus_Real **)ptr_Z, parent_rank,
+                                                                     (const H2Opus_Real **)ptr_E, level_rank,
+                                                                     (H2Opus_Real)0, ptr_ZE, ld_ZE, batch_size));
 
             // The blocks after that are the transpose of the coupling matrices within a block row
             // First marshal the coupling nodes for each row
@@ -433,24 +484,52 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
                 stacked_node_col, parent_rank, level_rank, ld_ZE, start_index, coupling_start, coupling_end,
                 offdiag_coupling_start, offdiag_coupling_end, batch_size, stream);
 
-            // Now stack them up using the batch transpose
+            // Now stack them up using the batch transpose/copy
             int total_coupling_blocks = coupling_end - coupling_start + offdiag_coupling_end - offdiag_coupling_start;
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::transpose)(
-                stream, level_rank, level_rank, ptr_S, level_rank, ptr_row_data, ld_ZE, total_coupling_blocks));
-
+            if (direction == BSN_DIRECTION_ROW)
+            {
+                check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::transpose)(stream, level_rank, level_rank, ptr_S,
+                                                                              level_rank, ptr_row_data, ld_ZE,
+                                                                              total_coupling_blocks));
+            }
+            else
+            {
+                check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, level_rank, level_rank,
+                                                                              ptr_row_data, 0, 0, ld_ZE, ptr_S, 0, 0,
+                                                                              level_rank, total_coupling_blocks));
+            }
             ////////////////////////////////////////////////////////////////////////////////
             // Now we can form the Z nodes of the current level by taking the triangular factor
             // of the QR decomposition of SN: [~, Z_t] = qr(SN_t);
             ////////////////////////////////////////////////////////////////////////////////
+#ifdef H2OPUS_HCOMPRESS_USE_CHOLESKY_QR
+            // Compute Gram matrix G = A'*A
+            H2Opus_Real **Z_hat_ptrs = stacked_node_tau_ptrs;
+            generateArrayOfPointers(Z_hat_level, Z_hat_ptrs, level_rank * level_rank, batch_size, stream, hw);
+
+            // I tried syrk, but for these sizes it seems gemm is faster
+            check_kblas_error(
+                (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, stacked_node_col,
+                                                       stacked_node_col, stacked_node_row, level_rank, level_rank,
+                                                       ld_ZE, (H2Opus_Real)1, (const H2Opus_Real **)stacked_node_ptrs,
+                                                       stacked_node_ld, (const H2Opus_Real **)stacked_node_ptrs,
+                                                       stacked_node_ld, (H2Opus_Real)0, Z_hat_ptrs, stacked_node_col,
+                                                       batch_size));
+
+            // Compute the special cholesky factor for rank deficient matrices
+            check_kblas_error(
+                (H2OpusBatched<H2Opus_Real, hw>::potrf_rd)(stream, level_rank, Z_hat_ptrs, level_rank, batch_size));
+#else
             check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::tsqrf)(stream, stacked_node_row, stacked_node_col, ld_ZE,
                                                                       level_rank, stacked_node_ptrs, stacked_node_ld,
                                                                       stacked_node_tau_ptrs, batch_size));
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(
-                stream, ld_ZE, level_rank, stacked_node_data, ld_ZE, ld_ZE * level_rank, Z_hat_level, level_rank,
-                level_rank * level_rank, batch_size));
-
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(stream, ld_ZE, level_rank, stacked_node_data,
+                                                                           ld_ZE, ld_ZE * level_rank, Z_hat_level,
+                                                                           level_rank, level_rank * level_rank,
+                                                                           batch_size));
+#endif
             start_index += batch_size;
             Z_hat_level += batch_size * level_rank * level_rank;
             batch_index++;
@@ -462,8 +541,6 @@ template <int hw>
 void hcompress_project_top_level(TBasisTree<hw> &basis_tree, HcompressUpsweepWorkspace &upsweep_ws,
                                  HcompressProjectTopLevelWorkspace &top_level_ws, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     BasisTreeLevelData &level_data = basis_tree.level_data;
     int top_level = level_data.nested_root_level;
     if (top_level == 0)
@@ -475,12 +552,16 @@ void hcompress_project_top_level(TBasisTree<hw> &basis_tree, HcompressUpsweepWor
     size_t num_nodes = level_data.getLevelSize(top_level);
 
     if (num_nodes == 0 || parent_rank == 0 || level_rank == 0 || level_truncated_rank == 0)
+    {
+        basis_tree.trans_mem[top_level].resize(0);
+        level_data.nested_root_level = 0;
         return;
+    }
 
     H2Opus_Real *T_hat_level = upsweep_ws.T_hat[top_level];
     H2Opus_Real *old_level = top_level_ws.old_transfer;
     copyArray(vec_ptr(basis_tree.trans_mem[top_level]), old_level, basis_tree.trans_mem[top_level].size(), stream, hw);
-    basis_tree.trans_mem[top_level] = RealVector(num_nodes * level_truncated_rank * parent_rank);
+    basis_tree.trans_mem[top_level].resize(num_nodes * level_truncated_rank * parent_rank);
 
     H2Opus_Real *truncated_level = vec_ptr(basis_tree.trans_mem[top_level]);
     H2Opus_Real **T_ptrs = top_level_ws.ptr_A, **E_ptrs = top_level_ws.ptr_B, **TE_ptrs = top_level_ws.ptr_C;
@@ -491,33 +572,29 @@ void hcompress_project_top_level(TBasisTree<hw> &basis_tree, HcompressUpsweepWor
 
     H2Opus_Real alpha = 1, beta = 0;
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_NoTrans, level_truncated_rank, parent_rank, level_rank, alpha,
-        (const H2Opus_Real **)T_ptrs, level_rank, (const H2Opus_Real **)E_ptrs, level_rank, beta, TE_ptrs,
-        level_truncated_rank, num_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans,
+                                                             level_truncated_rank, parent_rank, level_rank, alpha,
+                                                             (const H2Opus_Real **)T_ptrs, level_rank,
+                                                             (const H2Opus_Real **)E_ptrs, level_rank, beta, TE_ptrs,
+                                                             level_truncated_rank, num_nodes));
 
     // The basis is now completely nested again
     level_data.nested_root_level = 0;
 }
 
 template <int hw>
-void hcompress_project_coupling_template(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_basis_tree,
-                                         TBasisTree<hw> &v_basis_tree, HcompressUpsweepWorkspace &u_upsweep_ws,
-                                         HcompressUpsweepWorkspace &v_upsweep_ws, HcompressProjectionWorkspace &proj_ws,
-                                         h2opusComputeStream_t stream)
+void hcompress_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_level_start, size_t v_level_start,
+                                      H2Opus_Real *Tu_level, int ld_tu, H2Opus_Real *Tv_level, int ld_tv,
+                                      int *node_u_index, int *node_v_index, HcompressUpsweepWorkspace &u_upsweep_ws,
+                                      HcompressUpsweepWorkspace &v_upsweep_ws, HcompressProjectionWorkspace &proj_ws,
+                                      h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
-    BasisTreeLevelData &u_level_data = u_basis_tree.level_data;
-    BasisTreeLevelData &v_level_data = v_basis_tree.level_data;
+    HNodeTreeLevelData &hnode_level_data = hnodes.level_data;
     std::vector<int> &u_new_ranks = u_upsweep_ws.new_ranks;
     // std::vector<int>& v_new_ranks = v_upsweep_ws.new_ranks;
-    HNodeTreeLevelData &hnode_level_data = hnodes.level_data;
-
-    assert(u_level_data.nested_root_level == v_level_data.nested_root_level);
 
     int num_levels = hnodes.depth;
-    int top_level = u_level_data.nested_root_level;
+    assert(num_levels > level);
 
     H2Opus_Real **TC_array = proj_ws.ptr_A, **C_array = proj_ws.ptr_B;
     H2Opus_Real **Tu_array = proj_ws.ptr_C, **Tv_array = proj_ws.ptr_D;
@@ -525,54 +602,88 @@ void hcompress_project_coupling_template(THNodeTree<hw> &hnodes, TBasisTree<hw> 
 
     H2Opus_Real alpha = 1, beta = 0;
 
-    // Now go through the levels of the tree and compute the projection
-    // of the coupling matrices into the new basis
-    for (int level = num_levels - 1; level >= top_level; level--)
+    int level_rank = hnode_level_data.getLevelRank(level);
+    int projection_rank = u_new_ranks[level];
+    size_t level_nodes = hnode_level_data.getCouplingLevelSize(level);
+
+    if (level_nodes == 0)
     {
-        int level_rank = hnode_level_data.getLevelRank(level);
-        int projection_rank = u_new_ranks[level];
-        size_t u_level_start = u_level_data.getLevelStart(level);
-        size_t v_level_start = v_level_data.getLevelStart(level);
-        size_t level_nodes = hnode_level_data.getCouplingLevelSize(level);
+        hnodes.rank_leaf_mem[level].resize(0);
+        return;
+    }
 
-        if (level_nodes == 0)
-            continue;
+    H2Opus_Real *C_level = vec_ptr(hnodes.rank_leaf_mem[level]);
 
-        H2Opus_Real *Tu_level = u_upsweep_ws.T_hat[level];
-        H2Opus_Real *Tv_level = v_upsweep_ws.T_hat[level];
-        H2Opus_Real *C_level = vec_ptr(hnodes.rank_leaf_mem[level]);
-
-        // Generate an array of pointers so that we can use the cublas batch gemm routines
+    // Generate an array of pointers so that we can use the cublas batch gemm routines
+    if (level_rank != 0 && projection_rank != 0)
+    {
         generateArrayOfPointers(TC, TC_array, projection_rank * level_rank, level_nodes, stream, hw);
         generateArrayOfPointers(C_level, C_array, level_rank * level_rank, level_nodes, stream, hw);
 
         size_t coupling_start = hnode_level_data.getCouplingLevelStart(level);
 
-        hcompress_project_batch_marshal<H2Opus_Real, hw>(
-            vec_ptr(hnodes.rank_leaf_tree_index), vec_ptr(hnodes.node_u_index), Tu_level, Tu_array,
-            level_rank * level_rank, coupling_start, u_level_start, level_nodes, stream);
-        hcompress_project_batch_marshal<H2Opus_Real, hw>(
-            vec_ptr(hnodes.rank_leaf_tree_index), vec_ptr(hnodes.node_v_index), Tv_level, Tv_array,
-            level_rank * level_rank, coupling_start, v_level_start, level_nodes, stream);
+        hcompress_project_batch_marshal<H2Opus_Real, hw>(vec_ptr(hnodes.rank_leaf_tree_index), node_u_index, Tu_level,
+                                                         Tu_array, ld_tu * level_rank, coupling_start, u_level_start,
+                                                         level_nodes, stream);
+        hcompress_project_batch_marshal<H2Opus_Real, hw>(vec_ptr(hnodes.rank_leaf_tree_index), node_v_index, Tv_level,
+                                                         Tv_array, ld_tv * level_rank, coupling_start, v_level_start,
+                                                         level_nodes, stream);
 
         // First calculate TC_{ts} = Tu_{t} C_{ts}
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_NoTrans, projection_rank, level_rank, level_rank, alpha,
-            (const H2Opus_Real **)Tu_array, level_rank, (const H2Opus_Real **)C_array, level_rank, beta, TC_array,
-            projection_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans,
+                                                                 projection_rank, level_rank, level_rank, alpha,
+                                                                 (const H2Opus_Real **)Tu_array, ld_tu,
+                                                                 (const H2Opus_Real **)C_array, level_rank, beta,
+                                                                 TC_array, projection_rank, level_nodes));
+    }
 
-        // Now we can resize the coupling matrix data to hold the new projected nodes
-        hnodes.rank_leaf_mem[level] = RealVector(projection_rank * projection_rank * level_nodes);
+    // Now we can resize the coupling matrix data to hold the new projected nodes
+    hnodes.rank_leaf_mem[level].resize(projection_rank * projection_rank * level_nodes);
 
+    if (level_rank != 0 && projection_rank != 0)
+    {
         // Regenerate the level pointers
         C_level = vec_ptr(hnodes.rank_leaf_mem[level]);
         generateArrayOfPointers(C_level, C_array, projection_rank * projection_rank, level_nodes, stream, hw);
 
         // Now calculate C_{ts} = TC_{ts} * Pv_{t}^t
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_Trans, projection_rank, projection_rank, level_rank, alpha,
-            (const H2Opus_Real **)TC_array, projection_rank, (const H2Opus_Real **)Tv_array, level_rank, beta, C_array,
-            projection_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, projection_rank,
+                                                                 projection_rank, level_rank, alpha,
+                                                                 (const H2Opus_Real **)TC_array, projection_rank,
+                                                                 (const H2Opus_Real **)Tv_array, ld_tv, beta, C_array,
+                                                                 projection_rank, level_nodes));
+    }
+}
+
+template <int hw>
+void hcompress_project_template(THNodeTree<hw> &hnodes, BasisTreeLevelData &u_level_data,
+                                BasisTreeLevelData &v_level_data, HcompressUpsweepWorkspace &u_upsweep_ws,
+                                HcompressUpsweepWorkspace &v_upsweep_ws, HcompressProjectionWorkspace &proj_ws,
+                                h2opusComputeStream_t stream)
+{
+    assert(u_level_data.nested_root_level == v_level_data.nested_root_level);
+
+    int num_levels = hnodes.depth;
+    int top_level = u_level_data.nested_root_level;
+
+    int *node_u_index = vec_ptr(hnodes.node_u_index);
+    int *node_v_index = vec_ptr(hnodes.node_v_index);
+
+    // Now go through the levels of the tree and compute the projection
+    // of the coupling matrices into the new basis
+    for (int level = num_levels - 1; level >= top_level; level--)
+    {
+        H2Opus_Real *Tu_level = u_upsweep_ws.T_hat[level];
+        H2Opus_Real *Tv_level = v_upsweep_ws.T_hat[level];
+
+        size_t u_level_start = u_level_data.getLevelStart(level);
+        size_t v_level_start = v_level_data.getLevelStart(level);
+        int ld_tu = u_level_data.getLevelRank(level);
+        int ld_tv = v_level_data.getLevelRank(level);
+
+        hcompress_project_level_template<hw>(hnodes, level, u_level_start, v_level_start, Tu_level, ld_tu, Tv_level,
+                                             ld_tv, node_u_index, node_v_index, u_upsweep_ws, v_upsweep_ws, proj_ws,
+                                             stream);
     }
 }
 
@@ -580,25 +691,26 @@ template <int hw>
 void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &weight_packet, H2Opus_Real eps,
                         h2opusHandle_t h2opus_handle)
 {
-    // Only symmetric matrices for now
-    assert(hmatrix.sym);
-
     H2OpusWorkspaceState ws_needed = hcompress_workspace(hmatrix);
     H2OpusWorkspaceState ws_allocated = h2opus_handle->getWorkspaceState();
 
     if (ws_allocated < ws_needed)
     {
-        // printf("Insufficient workspace for hcompress...allocating...");
         h2opus_handle->setWorkspaceState(ws_needed);
-        // printf("done.\n");
     }
-
-    BasisTreeLevelData &u_level_data = hmatrix.u_basis_tree.level_data;
-    HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
 
     h2opusComputeStream_t main_stream = h2opus_handle->getMainStream();
     HcompressWorkspace workspace;
     hcompress_get_workspace(hmatrix, workspace, h2opus_handle);
+
+    TBasisTree<hw> &u_basis_tree = hmatrix.u_basis_tree;
+    TBasisTree<hw> &v_basis_tree = (hmatrix.sym ? u_basis_tree : hmatrix.v_basis_tree);
+    HcompressUpsweepWorkspace &ws_u_upsweep = workspace.u_upsweep;
+    HcompressUpsweepWorkspace &ws_v_upsweep = (hmatrix.sym ? workspace.u_upsweep : workspace.v_upsweep);
+
+    BasisTreeLevelData &u_level_data = u_basis_tree.level_data;
+    BasisTreeLevelData &v_level_data = v_basis_tree.level_data;
+    HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
 
 #ifdef H2OPUS_PROFILING_ENABLED
     Timer<hw> timer;
@@ -616,18 +728,23 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
     timer.start();
 #endif
     // Apply the weight acceleration packet to insert its Zhat level into the the Zhat tree
-    hcompress_appyly_weight_packet<hw>(hmatrix.u_basis_tree, workspace.u_upsweep, weight_packet, main_stream);
+    hcompress_appyly_weight_packet<hw>(u_level_data, workspace.u_upsweep, weight_packet, main_stream);
+    hcompress_generate_optimal_basis_template<hw>(hmatrix.hnodes, NULL, BSN_DIRECTION_ROW, u_basis_tree, ws_u_upsweep,
+                                                  workspace.optimal_u_bgen, weight_packet.level, eps, main_stream);
+    if (!hmatrix.sym)
+    {
+        hcompress_appyly_weight_packet<hw>(v_level_data, workspace.v_upsweep, weight_packet, main_stream);
+        hcompress_generate_optimal_basis_template<hw>(hmatrix.hnodes, NULL, BSN_DIRECTION_COLUMN, v_basis_tree,
+                                                      ws_v_upsweep, workspace.optimal_v_bgen, weight_packet.level, eps,
+                                                      main_stream);
 
-    hcompress_generate_optimal_basis_template<hw>(hmatrix.hnodes, NULL, BSN_DIRECTION_ROW, hmatrix.u_basis_tree,
-                                                  workspace.u_upsweep, workspace.optimal_bgen, weight_packet.level,
-                                                  main_stream);
-
-    // dumpMatrixTreeContainer(u_level_data, workspace.u_upsweep.Z_hat, 4, hw);
+        // dumpMatrixTreeContainer(u_level_data, workspace.u_upsweep.Z_hat, 4, hw);
+        // dumpMatrixTreeContainer(v_level_data, workspace.v_upsweep.Z_hat, 4, hw);
+    }
 
 #ifdef H2OPUS_PROFILING_ENABLED
     gather_time = timer.stop();
-    gather_gflops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM) +
-                    PerformanceCounter::getOpCount(PerformanceCounter::QR);
+    gather_gflops = PerformanceCounter::getOpCount();
     PerformanceCounter::clearCounters();
     HLibProfile::addRun(HLibProfile::HCOMPRESS_BASIS_GEN, gather_gflops, gather_time);
 #endif
@@ -638,15 +755,19 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
 #ifdef H2OPUS_PROFILING_ENABLED
     timer.start();
 #endif
-    hcompress_truncate_basis<hw>(hmatrix.u_basis_tree, eps, workspace.u_upsweep, main_stream);
-
-    // dumpMatrixTreeContainer(u_level_data, workspace.u_upsweep.T_hat, 4, hw);
+    if (hmatrix.sym)
+        hcompress_truncate_basis<hw>(u_basis_tree, eps, ws_v_upsweep, main_stream);
+    else
+    {
+        hcompress_truncate_basis<hw>(u_basis_tree, v_basis_tree, eps, workspace.u_upsweep, workspace.v_upsweep,
+                                     main_stream);
+        // dumpMatrixTreeContainer(u_level_data, workspace.u_upsweep.T_hat, 4, hw);
+        // dumpMatrixTreeContainer(v_level_data, workspace.v_upsweep.T_hat, 4, hw);
+    }
 
 #ifdef H2OPUS_PROFILING_ENABLED
     trunc_time = timer.stop();
-    trunc_gflops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM) +
-                   PerformanceCounter::getOpCount(PerformanceCounter::QR) +
-                   PerformanceCounter::getOpCount(PerformanceCounter::SVD);
+    trunc_gflops = PerformanceCounter::getOpCount();
     PerformanceCounter::clearCounters();
     HLibProfile::addRun(HLibProfile::HCOMPRESS_TRUNCATE_BASIS, trunc_gflops, trunc_time);
 #endif
@@ -657,12 +778,13 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
 #ifdef H2OPUS_PROFILING_ENABLED
     timer.start();
 #endif
-    hcompress_project_coupling_template<hw>(hmatrix.hnodes, hmatrix.u_basis_tree, hmatrix.u_basis_tree,
-                                            workspace.u_upsweep, workspace.u_upsweep, workspace.projection,
-                                            main_stream);
+
+    hcompress_project_template<hw>(hmatrix.hnodes, u_level_data, v_level_data, ws_u_upsweep, ws_v_upsweep,
+                                   workspace.projection, main_stream);
+
 #ifdef H2OPUS_PROFILING_ENABLED
     project_time = timer.stop();
-    project_gflops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
+    project_gflops = PerformanceCounter::getOpCount();
     PerformanceCounter::clearCounters();
     HLibProfile::addRun(HLibProfile::HCOMPRESS_PROJECTION, project_gflops, project_time);
 #endif
@@ -671,7 +793,8 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
     // Update the weight packet to include the Z_hat level that was not affected in
     // this truncation, i.e. to the level = nested_root_level - 1
     ////////////////////////////////////////////////////////////////////////////////
-    std::vector<int> &u_new_ranks = workspace.u_upsweep.new_ranks;
+    std::vector<int> &u_new_ranks = ws_u_upsweep.new_ranks;
+    std::vector<int> &v_new_ranks = ws_v_upsweep.new_ranks;
 
     int acc_level = u_level_data.nested_root_level - 1;
     if (acc_level < 0)
@@ -690,10 +813,13 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
 #ifdef H2OPUS_PROFILING_ENABLED
     timer.start();
 #endif
-    hcompress_project_top_level<hw>(hmatrix.u_basis_tree, workspace.u_upsweep, workspace.u_top_level, main_stream);
+    hcompress_project_top_level<hw>(u_basis_tree, ws_u_upsweep, workspace.u_top_level, main_stream);
+    if (!hmatrix.sym)
+        hcompress_project_top_level<hw>(v_basis_tree, ws_v_upsweep, workspace.v_top_level, main_stream);
+
 #ifdef H2OPUS_PROFILING_ENABLED
     stitch_time = timer.stop();
-    stitch_gflops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
+    stitch_gflops = PerformanceCounter::getOpCount();
     PerformanceCounter::clearCounters();
     HLibProfile::addRun(HLibProfile::HCOMPRESS_STITCH, stitch_gflops, stitch_time);
 #endif
@@ -702,11 +828,15 @@ void hcompress_template(THMatrix<hw> &hmatrix, TWeightAccelerationPacket<hw> &we
     // Update the level data
     ////////////////////////////////////////////////////////////////////////////////
     // printf("Level nodes\tOld_rank\tNew_rank\n");
-    // for(int i = u_level_data.depth - 1; i >= 0; i--)
-    // 	printf("%d\t\t%d\t\t%d\n", hnode_level_data.getCouplingLevelSize(i), hnode_level_data.getLevelRank(i),
-    // u_new_ranks[i]); printf("\n");
+    // for (int i = u_level_data.depth - 1; i >= 0; i--)
+    //    printf("%d\t\t%d\t\t%d\n", hnode_level_data.getCouplingLevelSize(i), hnode_level_data.getLevelRank(i),
+    //           u_new_ranks[i]);
+    // printf("\n");
 
     u_level_data.setLevelRanks(vec_ptr(u_new_ranks));
+    if (!hmatrix.sym)
+        v_level_data.setLevelRanks(vec_ptr(v_new_ranks));
+
     hnode_level_data.setRankFromBasis(u_level_data, 0);
 }
 
@@ -721,11 +851,11 @@ template <int hw> void hcompress_template(THMatrix<hw> &hmatrix, H2Opus_Real eps
 ////////////////////////////////////////////////////////////////////////////////
 void hcompress_generate_optimal_basis(HNodeTree &hnodes, HNodeTree *offdiagonal_hnodes, BSNPointerDirection direction,
                                       BasisTree &basis_tree, HcompressUpsweepWorkspace &upsweep_workspace,
-                                      HcompressOptimalBGenWorkspace &bgen_workspace, int start_level,
+                                      HcompressOptimalBGenWorkspace &bgen_workspace, int start_level, H2Opus_Real eps,
                                       h2opusComputeStream_t stream)
 {
     hcompress_generate_optimal_basis_template<H2OPUS_HWTYPE_CPU>(
-        hnodes, offdiagonal_hnodes, direction, basis_tree, upsweep_workspace, bgen_workspace, start_level, stream);
+        hnodes, offdiagonal_hnodes, direction, basis_tree, upsweep_workspace, bgen_workspace, start_level, eps, stream);
 }
 
 int hcompress_compressed_basis_leaf_rank(BasisTree &basis_tree, H2Opus_Real eps, HcompressUpsweepWorkspace &workspace,
@@ -752,12 +882,23 @@ int hcompress_compressed_basis_level_rank(BasisTree &basis_tree, H2Opus_Real eps
     return hcompress_compressed_basis_level_rank_template<H2OPUS_HWTYPE_CPU>(basis_tree, eps, level, workspace, stream);
 }
 
-void hcompress_project_coupling(HNodeTree &hnodes, BasisTree &u_basis_tree, BasisTree &v_basis_tree,
-                                HcompressUpsweepWorkspace &u_upsweep_ws, HcompressUpsweepWorkspace &v_upsweep_ws,
-                                HcompressProjectionWorkspace &proj_ws, h2opusComputeStream_t stream)
+void hcompress_project_level(HNodeTree &hnodes, int level, size_t u_level_start, size_t v_level_start,
+                             H2Opus_Real *Tu_level, int ld_tu, H2Opus_Real *Tv_level, int ld_tv, int *node_u_index,
+                             int *node_v_index, HcompressUpsweepWorkspace &u_upsweep_ws,
+                             HcompressUpsweepWorkspace &v_upsweep_ws, HcompressProjectionWorkspace &proj_ws,
+                             h2opusComputeStream_t stream)
 {
-    hcompress_project_coupling_template<H2OPUS_HWTYPE_CPU>(hnodes, u_basis_tree, v_basis_tree, u_upsweep_ws,
-                                                           v_upsweep_ws, proj_ws, stream);
+    hcompress_project_level_template<H2OPUS_HWTYPE_CPU>(hnodes, level, u_level_start, v_level_start, Tu_level, ld_tu,
+                                                        Tv_level, ld_tv, node_u_index, node_v_index, u_upsweep_ws,
+                                                        v_upsweep_ws, proj_ws, stream);
+}
+
+void hcompress_project(HNodeTree &hnodes, BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                       HcompressUpsweepWorkspace &u_upsweep_ws, HcompressUpsweepWorkspace &v_upsweep_ws,
+                       HcompressProjectionWorkspace &proj_ws, h2opusComputeStream_t stream)
+{
+    hcompress_project_template<H2OPUS_HWTYPE_CPU>(hnodes, u_level_data, v_level_data, u_upsweep_ws, v_upsweep_ws,
+                                                  proj_ws, stream);
 }
 
 void hcompress(HMatrix &hmatrix, H2Opus_Real eps, h2opusHandle_t h2opus_handle)
@@ -774,11 +915,11 @@ void hcompress(HMatrix &hmatrix, WeightAccelerationPacket &packet, H2Opus_Real e
 void hcompress_generate_optimal_basis(HNodeTree_GPU &hnodes, HNodeTree_GPU *offdiagonal_hnodes,
                                       BSNPointerDirection direction, BasisTree_GPU &basis_tree,
                                       HcompressUpsweepWorkspace &upsweep_workspace,
-                                      HcompressOptimalBGenWorkspace &bgen_workspace, int start_level,
+                                      HcompressOptimalBGenWorkspace &bgen_workspace, int start_level, H2Opus_Real eps,
                                       h2opusComputeStream_t stream)
 {
     hcompress_generate_optimal_basis_template<H2OPUS_HWTYPE_GPU>(
-        hnodes, offdiagonal_hnodes, direction, basis_tree, upsweep_workspace, bgen_workspace, start_level, stream);
+        hnodes, offdiagonal_hnodes, direction, basis_tree, upsweep_workspace, bgen_workspace, start_level, eps, stream);
 }
 
 int hcompress_compressed_basis_leaf_rank(BasisTree_GPU &basis_tree, H2Opus_Real eps,
@@ -805,12 +946,23 @@ int hcompress_compressed_basis_level_rank(BasisTree_GPU &basis_tree, H2Opus_Real
     return hcompress_compressed_basis_level_rank_template<H2OPUS_HWTYPE_GPU>(basis_tree, eps, level, workspace, stream);
 }
 
-void hcompress_project_coupling(HNodeTree_GPU &hnodes, BasisTree_GPU &u_basis_tree, BasisTree_GPU &v_basis_tree,
-                                HcompressUpsweepWorkspace &u_upsweep_ws, HcompressUpsweepWorkspace &v_upsweep_ws,
-                                HcompressProjectionWorkspace &proj_ws, h2opusComputeStream_t stream)
+void hcompress_project_level(HNodeTree_GPU &hnodes, int level, size_t u_level_start, size_t v_level_start,
+                             H2Opus_Real *Tu_level, int ld_tu, H2Opus_Real *Tv_level, int ld_tv, int *node_u_index,
+                             int *node_v_index, HcompressUpsweepWorkspace &u_upsweep_ws,
+                             HcompressUpsweepWorkspace &v_upsweep_ws, HcompressProjectionWorkspace &proj_ws,
+                             h2opusComputeStream_t stream)
 {
-    hcompress_project_coupling_template<H2OPUS_HWTYPE_GPU>(hnodes, u_basis_tree, v_basis_tree, u_upsweep_ws,
-                                                           v_upsweep_ws, proj_ws, stream);
+    hcompress_project_level_template<H2OPUS_HWTYPE_GPU>(hnodes, level, u_level_start, v_level_start, Tu_level, ld_tu,
+                                                        Tv_level, ld_tv, node_u_index, node_v_index, u_upsweep_ws,
+                                                        v_upsweep_ws, proj_ws, stream);
+}
+
+void hcompress_project(HNodeTree_GPU &hnodes, BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                       HcompressUpsweepWorkspace &u_upsweep_ws, HcompressUpsweepWorkspace &v_upsweep_ws,
+                       HcompressProjectionWorkspace &proj_ws, h2opusComputeStream_t stream)
+{
+    hcompress_project_template<H2OPUS_HWTYPE_GPU>(hnodes, u_level_data, v_level_data, u_upsweep_ws, v_upsweep_ws,
+                                                  proj_ws, stream);
 }
 
 void hcompress(HMatrix_GPU &hmatrix, H2Opus_Real eps, h2opusHandle_t h2opus_handle)

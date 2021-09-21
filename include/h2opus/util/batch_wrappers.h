@@ -3,15 +3,14 @@
 
 #include <h2opus/core/h2opus_eps.h>
 #include <h2opus/core/h2opus_handle.h>
+#include <h2opus/core/h2opus_compute_stream.h>
+
+#define H2OPUS_MAX_OPS_PER_BATCH 65535
 
 #ifdef H2OPUS_PROFILING_ENABLED
 #include <h2opus/util/perf_counter.h>
 #endif
-#include <h2opus/util/blas_wrappers.h>
 #include <h2opus/util/debug_routines.h>
-
-#define H2OPUS_GEMM_OP_COUNT(m, n, k) (2 * (m) * (n) * (k))
-#define H2OPUS_MAX_OPS_PER_BATCH 65535
 
 template <class T, int hw> struct H2OpusBatched;
 

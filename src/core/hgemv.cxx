@@ -9,6 +9,8 @@
 #include <h2opus/util/gpu_err_check.h>
 #include <h2opus/util/thrust_wrappers.h>
 
+// #define H2OPUS_DISABLE_STREAMED_HGEMV
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Template routines
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,10 +47,11 @@ void hgemv_upsweep_leaves_template(H2Opus_Real alpha, TBasisTree<hw> &basis_tree
         vec_ptr(basis_tree.node_start), vec_ptr(basis_tree.node_len), m_batch, n_batch, k_batch, lda_batch, ldb_batch,
         ldc_batch, num_leaves, stream);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_Trans, H2Opus_NoTrans, m_batch, n_batch, k_batch, leaf_rank, num_vectors, leaf_size, alpha,
-        (const H2Opus_Real **)A_ptrs, lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch, (H2Opus_Real)0, C_ptrs,
-        ldc_batch, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, m_batch, n_batch,
+                                                             k_batch, leaf_rank, num_vectors, leaf_size, alpha,
+                                                             (const H2Opus_Real **)A_ptrs, lda_batch,
+                                                             (const H2Opus_Real **)B_ptrs, ldb_batch, (H2Opus_Real)0,
+                                                             C_ptrs, ldc_batch, num_leaves));
 }
 
 template <int hw>
@@ -93,10 +96,12 @@ void hgemv_upsweep_level_template(TBasisTree<hw> &basis_tree, int level, int num
         H2Opus_Real beta = (i == 0 ? 0 : 1);
         H2Opus_Real alpha = 1;
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_Trans, H2Opus_NoTrans, parent_rank, num_vectors, child_rank, alpha,
-            (const H2Opus_Real **)A_ptrs + i * num_parents, child_rank, (const H2Opus_Real **)B_ptrs + i * num_parents,
-            child_rank, beta, C_ptrs + i * num_parents, parent_rank, num_parents));
+        check_kblas_error(
+            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, parent_rank, num_vectors,
+                                                   child_rank, alpha, (const H2Opus_Real **)A_ptrs + i * num_parents,
+                                                   child_rank, (const H2Opus_Real **)B_ptrs + i * num_parents,
+                                                   child_rank, beta, C_ptrs + i * num_parents, parent_rank,
+                                                   num_parents));
     }
 }
 
@@ -114,15 +119,14 @@ void hgemv_upsweep_template(H2Opus_Real alpha, TBasisTree<hw> &basis_tree, H2Opu
 }
 
 template <int hw>
-void hgemv_downsweep_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors,
-                              HgemvWorkspace &workspace, h2opusComputeStream_t stream)
+void hgemv_downsweep_leaves_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors,
+                                     HgemvWorkspace &workspace, h2opusComputeStream_t stream)
 {
     BasisTreeLevelData &level_data = basis_tree.level_data;
     VectorTree &yhat = workspace.yhat;
 
     int num_levels = basis_tree.depth;
 
-    // Allocate pointers so we can generate batch arguments
     BatchGemmMarshalledData &marshal_data = workspace.low_rank_gemms;
     H2Opus_Real **A_ptrs = marshal_data.A_ptrs;
     H2Opus_Real **B_ptrs = marshal_data.B_ptrs;
@@ -131,41 +135,6 @@ void hgemv_downsweep_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y, int ld
     int *m_batch = marshal_data.m_batch, *n_batch = marshal_data.n_batch, *k_batch = marshal_data.k_batch;
     int *lda_batch = marshal_data.lda_batch, *ldb_batch = marshal_data.ldb_batch, *ldc_batch = marshal_data.ldc_batch;
 
-    //////////////////////////////////////////////////////////
-    // Sweep down the tree
-    //////////////////////////////////////////////////////////
-    for (int level = 1; level < num_levels; level++)
-    {
-        H2Opus_Real *yhat_child_level = yhat.data[level];
-        H2Opus_Real *yhat_parent_level = yhat.data[level - 1];
-
-        int child_rank = level_data.getLevelRank(level);
-        int parent_rank = level_data.getLevelRank(level - 1);
-
-        size_t num_children = level_data.getLevelSize(level);
-        size_t num_parents = level_data.getLevelSize(level - 1);
-
-        size_t child_start = level_data.getLevelStart(level);
-        size_t parent_start = level_data.getLevelStart(level - 1);
-
-        // Get the basis data pointer for this level of the tree
-        H2Opus_Real *u_trans_level = basis_tree.getTransLevelData(level);
-
-        hgemv_downsweep_batch_marshal<H2Opus_Real, hw>(
-            A_ptrs, B_ptrs, C_ptrs, num_children, num_parents, num_vectors, u_trans_level, yhat_parent_level,
-            yhat_child_level, child_rank, parent_rank, child_start, parent_start, basis_tree.parent_ptr(), stream);
-
-        H2Opus_Real beta = 1, alpha = 1;
-
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_NoTrans, child_rank, num_vectors, parent_rank, alpha,
-            (const H2Opus_Real **)A_ptrs, child_rank, (const H2Opus_Real **)B_ptrs, parent_rank, beta, C_ptrs,
-            child_rank, num_children));
-    }
-
-    //////////////////////////////////////////////////////////
-    // Handle the leaves
-    //////////////////////////////////////////////////////////
     size_t num_leaves = basis_tree.basis_leaves;
     if (num_leaves != 0)
     {
@@ -182,11 +151,71 @@ void hgemv_downsweep_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y, int ld
             leaf_level_start, vec_ptr(basis_tree.node_start), vec_ptr(basis_tree.node_len), m_batch, n_batch, k_batch,
             lda_batch, ldb_batch, ldc_batch, num_leaves, stream);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_NoTrans, m_batch, n_batch, k_batch, leaf_size, num_vectors, leaf_rank,
-            (H2Opus_Real)1, (const H2Opus_Real **)A_ptrs, lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch,
-            (H2Opus_Real)1, C_ptrs, ldc_batch, num_leaves));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, m_batch,
+                                                                 n_batch, k_batch, leaf_size, num_vectors, leaf_rank,
+                                                                 (H2Opus_Real)1, (const H2Opus_Real **)A_ptrs,
+                                                                 lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch,
+                                                                 (H2Opus_Real)1, C_ptrs, ldc_batch, num_leaves));
     }
+}
+
+template <int hw>
+void hgemv_downsweep_level_template(TBasisTree<hw> &basis_tree, int num_vectors, int level, HgemvWorkspace &workspace,
+                                    h2opusComputeStream_t stream)
+{
+    BasisTreeLevelData &level_data = basis_tree.level_data;
+    VectorTree &yhat = workspace.yhat;
+
+    // Allocate pointers so we can generate batch arguments
+    BatchGemmMarshalledData &marshal_data = workspace.low_rank_gemms;
+    H2Opus_Real **A_ptrs = marshal_data.A_ptrs;
+    H2Opus_Real **B_ptrs = marshal_data.B_ptrs;
+    H2Opus_Real **C_ptrs = marshal_data.C_ptrs;
+
+    H2Opus_Real *yhat_child_level = yhat.data[level];
+    H2Opus_Real *yhat_parent_level = yhat.data[level - 1];
+
+    int child_rank = level_data.getLevelRank(level);
+    int parent_rank = level_data.getLevelRank(level - 1);
+
+    size_t num_children = level_data.getLevelSize(level);
+    size_t num_parents = level_data.getLevelSize(level - 1);
+
+    size_t child_start = level_data.getLevelStart(level);
+    size_t parent_start = level_data.getLevelStart(level - 1);
+
+    // Get the basis data pointer for this level of the tree
+    H2Opus_Real *u_trans_level = basis_tree.getTransLevelData(level);
+
+    hgemv_downsweep_batch_marshal<H2Opus_Real, hw>(
+        A_ptrs, B_ptrs, C_ptrs, num_children, num_parents, num_vectors, u_trans_level, yhat_parent_level,
+        yhat_child_level, child_rank, parent_rank, child_start, parent_start, basis_tree.parent_ptr(), stream);
+
+    H2Opus_Real beta = 1, alpha = 1;
+
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, child_rank,
+                                                             num_vectors, parent_rank, alpha,
+                                                             (const H2Opus_Real **)A_ptrs, child_rank,
+                                                             (const H2Opus_Real **)B_ptrs, parent_rank, beta, C_ptrs,
+                                                             child_rank, num_children));
+}
+
+template <int hw>
+void hgemv_downsweep_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors,
+                              HgemvWorkspace &workspace, h2opusComputeStream_t stream)
+{
+    int num_levels = basis_tree.depth;
+
+    //////////////////////////////////////////////////////////
+    // Sweep down the tree
+    //////////////////////////////////////////////////////////
+    for (int level = 1; level < num_levels; level++)
+        hgemv_downsweep_level_template<hw>(basis_tree, num_vectors, level, workspace, stream);
+
+    //////////////////////////////////////////////////////////
+    // Handle the leaves
+    //////////////////////////////////////////////////////////
+    hgemv_downsweep_leaves_template<hw>(basis_tree, Y, ldy, num_vectors, workspace, stream);
 }
 
 template <int hw>
@@ -226,10 +255,11 @@ void hgemv_mult_level_template(THNodeTree<hw> &hnodes, int level, int num_vector
 
         int batch_size = coupling_batch_ptr[batch_id + 1] - coupling_batch_ptr[batch_id];
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, hblas_trans_mode, H2Opus_NoTrans, node_size, num_vectors, node_size, (H2Opus_Real)1,
-            (const H2Opus_Real **)A_batch, node_size, (const H2Opus_Real **)B_batch, node_size, (H2Opus_Real)1, C_batch,
-            node_size, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, hblas_trans_mode, H2Opus_NoTrans, node_size,
+                                                                 num_vectors, node_size, (H2Opus_Real)1,
+                                                                 (const H2Opus_Real **)A_batch, node_size,
+                                                                 (const H2Opus_Real **)B_batch, node_size,
+                                                                 (H2Opus_Real)1, C_batch, node_size, batch_size));
     }
 }
 
@@ -249,7 +279,7 @@ void hgemv_mult_template(int trans, THNodeTree<hw> &hnodes, int start_level, int
     VectorTree &yhat = workspace.yhat;
 
     int num_levels = level_data.depth;
-    assert(num_levels > end_level && start_level <= end_level);
+    assert(num_levels > end_level);
 
     BatchGemmMarshalledData &marshal_data = workspace.low_rank_gemms;
     BSNData &bsn_data = (transpose ? hnodes.bsn_col_data : hnodes.bsn_row_data);
@@ -318,10 +348,11 @@ void hgemv_denseMult_template(int hblas_trans_mode, H2Opus_Real alpha, THNodeTre
         int batch_size = dense_batch_ptr[batch_id + 1] - dense_batch_ptr[batch_id];
         H2Opus_Real batch_beta = (batch_id == 0 ? beta : 1);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, hblas_trans_mode, H2Opus_NoTrans, m_batch, n_batch, k_batch, node_size, num_vectors, node_size,
-            alpha, (const H2Opus_Real **)A_batch, lda_batch, (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
-            C_batch, ldc_batch, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, hblas_trans_mode, H2Opus_NoTrans, m_batch,
+                                                                 n_batch, k_batch, node_size, num_vectors, node_size,
+                                                                 alpha, (const H2Opus_Real **)A_batch, lda_batch,
+                                                                 (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
+                                                                 C_batch, ldc_batch, batch_size));
     }
 }
 
@@ -374,6 +405,7 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     if (trans == H2Opus_Trans && hmatrix.sym)
         trans = H2Opus_NoTrans;
 
+    H2OpusEvents &events = h2opus_handle->getEvents();
     TBasisTree<hw> &u_basis_tree = hmatrix.u_basis_tree;
     TBasisTree<hw> &v_basis_tree = (hmatrix.sym ? hmatrix.u_basis_tree : hmatrix.v_basis_tree);
 
@@ -387,6 +419,13 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     }
 
     h2opusComputeStream_t main_stream = h2opus_handle->getMainStream();
+#ifndef H2OPUS_DISABLE_STREAMED_HGEMV
+    h2opusComputeStream_t low_priority_stream = h2opus_handle->getLowPriorityStream();
+    events.allocateEvents<hw>(H2OpusDenseEvent, 1);
+#else
+    h2opusComputeStream_t low_priority_stream = main_stream;
+#endif
+
     HgemvWorkspace workspace;
     hgemv_get_workspace(hmatrix, trans, num_vectors, workspace, h2opus_handle);
 
@@ -398,22 +437,25 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
 
     // Dense multiplication phsae
     hgemv_denseMult_template<hw>(trans, alpha, hmatrix.hnodes, X, ldx, beta, Y, ldy, num_vectors, u_basis_tree,
-                                 v_basis_tree, workspace, main_stream);
+                                 v_basis_tree, workspace, low_priority_stream);
+#ifndef H2OPUS_DISABLE_STREAMED_HGEMV
+    events.recordEvent<hw>(H2OpusDenseEvent, 0, low_priority_stream);
+#endif
 
 #ifdef H2OPUS_PROFILING_ENABLED
     double dense_timer = timer.stop();
     double dense_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
     PerformanceCounter::clearCounters();
-    HLibProfile::addRun(HLibProfile::HGEMM_DENSE, dense_gops, dense_timer);
+    HLibProfile::addRun(HLibProfile::HGEMV_DENSE, dense_gops, dense_timer);
 
     timer.start();
 #endif
 
     // Upsweep phase
     if (trans == H2Opus_Trans)
-        hgemv_upsweep_template<hw>(alpha, v_basis_tree, X, ldx, num_vectors, workspace, main_stream);
-    else
         hgemv_upsweep_template<hw>(alpha, u_basis_tree, X, ldx, num_vectors, workspace, main_stream);
+    else
+        hgemv_upsweep_template<hw>(alpha, v_basis_tree, X, ldx, num_vectors, workspace, main_stream);
 
         // dumpHgemvTreeContainer(u_basis_tree.level_data, workspace.xhat.data, num_vectors, 4);
 
@@ -421,7 +463,7 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     double upsweep_timer = timer.stop();
     double upsweep_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
     PerformanceCounter::clearCounters();
-    HLibProfile::addRun(HLibProfile::HGEMM_UPSWEEP, upsweep_gops, upsweep_timer);
+    HLibProfile::addRun(HLibProfile::HGEMV_UPSWEEP, upsweep_gops, upsweep_timer);
 
     timer.start();
 #endif
@@ -436,11 +478,14 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     double mult_timer = timer.stop();
     double mult_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
     PerformanceCounter::clearCounters();
-    HLibProfile::addRun(HLibProfile::HGEMM_MULT, mult_gops, mult_timer);
+    HLibProfile::addRun(HLibProfile::HGEMV_MULT, mult_gops, mult_timer);
 
     timer.start();
 #endif
 
+#ifndef H2OPUS_DISABLE_STREAMED_HGEMV
+    events.streamWaitEvent<hw>(H2OpusDenseEvent, main_stream, 0);
+#endif
     // Downsweep phase
     if (trans == H2Opus_Trans)
         hgemv_downsweep_template<hw>(v_basis_tree, Y, ldy, num_vectors, workspace, main_stream);
@@ -453,7 +498,7 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     double downsweep_timer = timer.stop();
     double downsweep_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
     PerformanceCounter::clearCounters();
-    HLibProfile::addRun(HLibProfile::HGEMM_DOWNSWEEP, downsweep_gops, downsweep_timer);
+    HLibProfile::addRun(HLibProfile::HGEMV_DOWNSWEEP, downsweep_gops, downsweep_timer);
 
     timer.destroy();
 #endif
@@ -496,6 +541,18 @@ void hgemv_mult_level(HNodeTree_GPU &hnodes, int level, int num_vectors, size_t 
     hgemv_mult_level_template<H2OPUS_HWTYPE_GPU>(hnodes, level, num_vectors, u_index_offset, v_index_offset, xhat_level,
                                                  yhat_level, marshal_data, bsn_data, column_basis_indexes,
                                                  row_basis_indexes, hblas_trans_mode, stream);
+}
+
+void hgemv_downsweep_leaves(BasisTree_GPU &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors,
+                            HgemvWorkspace &workspace, h2opusComputeStream_t stream)
+{
+    hgemv_downsweep_leaves_template<H2OPUS_HWTYPE_GPU>(basis_tree, Y, ldy, num_vectors, workspace, stream);
+}
+
+void hgemv_downsweep_level(BasisTree_GPU &basis_tree, int num_vectors, int level, HgemvWorkspace &workspace,
+                           h2opusComputeStream_t stream)
+{
+    hgemv_downsweep_level_template<H2OPUS_HWTYPE_GPU>(basis_tree, num_vectors, level, workspace, stream);
 }
 
 void hgemv_upsweep_leaves(H2Opus_Real alpha, BasisTree_GPU &basis_tree, H2Opus_Real *X, int ldx, int num_vectors,
@@ -567,6 +624,18 @@ void hgemv_mult_level(HNodeTree &hnodes, int level, int num_vectors, size_t u_in
     hgemv_mult_level_template<H2OPUS_HWTYPE_CPU>(hnodes, level, num_vectors, u_index_offset, v_index_offset, xhat_level,
                                                  yhat_level, marshal_data, bsn_data, column_basis_indexes,
                                                  row_basis_indexes, hblas_trans_mode, stream);
+}
+
+void hgemv_downsweep_leaves(BasisTree &basis_tree, H2Opus_Real *Y, int ldy, int num_vectors, HgemvWorkspace &workspace,
+                            h2opusComputeStream_t stream)
+{
+    hgemv_downsweep_leaves_template<H2OPUS_HWTYPE_CPU>(basis_tree, Y, ldy, num_vectors, workspace, stream);
+}
+
+void hgemv_downsweep_level(BasisTree &basis_tree, int num_vectors, int level, HgemvWorkspace &workspace,
+                           h2opusComputeStream_t stream)
+{
+    hgemv_downsweep_level_template<H2OPUS_HWTYPE_CPU>(basis_tree, num_vectors, level, workspace, stream);
 }
 
 void hgemv_upsweep_leaves(H2Opus_Real alpha, BasisTree &basis_tree, H2Opus_Real *X, int ldx, int num_vectors,

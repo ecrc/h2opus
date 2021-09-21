@@ -1,8 +1,6 @@
 #ifndef __HNODE_TREE_DATA_H__
 #define __HNODE_TREE_DATA_H__
 
-#define COMPRESSION_BASIS_GEN_MAX_NODES 2000
-
 struct HNodeTreeLevelData
 {
     // Pointers to the node arrays for each level of the tree
@@ -217,24 +215,24 @@ template <class IntVector> struct THNodeTreeBSNData
 
     template <class otherIntVector> THNodeTreeBSNData &operator=(const THNodeTreeBSNData<otherIntVector> &h)
     {
-        copyThrustArray(this->dense_node_indexes, h.dense_node_indexes);
-        copyThrustArray(this->dense_ptrs, h.dense_ptrs);
-        copyThrustArray(this->dense_batch_indexes, h.dense_batch_indexes);
+        copyVector(this->dense_node_indexes, h.dense_node_indexes);
+        copyVector(this->dense_ptrs, h.dense_ptrs);
+        copyVector(this->dense_batch_indexes, h.dense_batch_indexes);
 
         this->dense_batch_ptr = h.dense_batch_ptr;
         this->max_nodes = h.max_nodes;
 
         // Deep copy for this one
-        resizeThrustArray(coupling_node_indexes, h.depth);
-        resizeThrustArray(coupling_ptrs, h.depth);
-        resizeThrustArray(coupling_batch_indexes, h.depth);
+        coupling_node_indexes.resize(h.depth);
+        coupling_ptrs.resize(h.depth);
+        coupling_batch_indexes.resize(h.depth);
         coupling_batch_ptr.resize(h.depth);
 
         for (int level = 0; level < h.depth; level++)
         {
-            copyThrustArray(this->coupling_node_indexes[level], h.coupling_node_indexes[level]);
-            copyThrustArray(this->coupling_ptrs[level], h.coupling_ptrs[level]);
-            copyThrustArray(this->coupling_batch_indexes[level], h.coupling_batch_indexes[level]);
+            copyVector(this->coupling_node_indexes[level], h.coupling_node_indexes[level]);
+            copyVector(this->coupling_ptrs[level], h.coupling_ptrs[level]);
+            copyVector(this->coupling_batch_indexes[level], h.coupling_batch_indexes[level]);
             this->coupling_batch_ptr[level] = h.coupling_batch_ptr[level];
         }
 
@@ -247,7 +245,7 @@ template <class IntVector> struct THNodeTreeBSNData
 
     void setCachedCouplingPtrs()
     {
-        const int block_size = COMPRESSION_BASIS_GEN_MAX_NODES;
+        const int block_size = H2OPUS_COMPRESSION_BASIS_GEN_MAX_NODES;
 
         cached_coupling_ptrs.resize(depth);
 
@@ -298,25 +296,25 @@ template <class IntVector> struct THNodeTreeBSNData
 
     void allocateLevels(int levels)
     {
-        this->depth = levels;
-        resizeThrustArray(coupling_ptrs, levels);
-        resizeThrustArray(coupling_node_indexes, levels);
-        resizeThrustArray(coupling_batch_indexes, levels);
-        this->coupling_batch_ptr.resize(levels);
+        depth = levels;
+        coupling_ptrs.resize(levels);
+        coupling_node_indexes.resize(levels);
+        coupling_batch_indexes.resize(levels);
+        coupling_batch_ptr.resize(levels);
     }
 
     void allocateBSNDenseData(int dense_nodes, int dense_rows_cols)
     {
-        resizeThrustArray(dense_ptrs, dense_rows_cols + 1);
-        resizeThrustArray(dense_node_indexes, dense_nodes);
-        resizeThrustArray(dense_batch_indexes, dense_nodes);
+        dense_ptrs.resize(dense_rows_cols + 1);
+        dense_node_indexes.resize(dense_nodes);
+        dense_batch_indexes.resize(dense_nodes);
     }
 
     void allocateBSNLevelData(int level, int coupling_nodes, int coupling_rows_cols)
     {
-        resizeThrustArray(coupling_ptrs[level], coupling_rows_cols + 1);
-        resizeThrustArray(coupling_node_indexes[level], coupling_nodes);
-        resizeThrustArray(coupling_batch_indexes[level], coupling_nodes);
+        coupling_ptrs[level].resize(coupling_rows_cols + 1);
+        coupling_node_indexes[level].resize(coupling_nodes);
+        coupling_batch_indexes[level].resize(coupling_nodes);
     }
 };
 
@@ -327,7 +325,7 @@ template <class IntVector> struct HNodeTreeBSRData
     // Column and row pointers for the dense blocks
     IntVector dense_row_ptr, dense_col_index;
 
-    // Colum and row pointers for the coupling matrices stored by level
+    // Column and row pointers for the coupling matrices stored by level
     IntVectorArray rank_row_ptr, rank_col_index;
 
     // The max number of blocks in a single row at each level
@@ -343,18 +341,17 @@ template <class IntVector> struct HNodeTreeBSRData
 
     template <class otherIntVector> HNodeTreeBSRData &operator=(const HNodeTreeBSRData<otherIntVector> &h)
     {
-        copyThrustArray(this->dense_row_ptr, h.dense_row_ptr);
-        copyThrustArray(this->dense_col_index, h.dense_col_index);
-
-        this->max_row_blocks = h.max_row_blocks;
+        copyVector(this->dense_row_ptr, h.dense_row_ptr);
+        copyVector(this->dense_col_index, h.dense_col_index);
+        copyVector(this->max_row_blocks, h.max_row_blocks);
 
         // Deep copy for this one
-        resizeThrustArray(rank_row_ptr, h.depth);
-        resizeThrustArray(rank_col_index, h.depth);
+        rank_row_ptr.resize(h.depth);
+        rank_col_index.resize(h.depth);
         for (int level = 0; level < h.depth; level++)
         {
-            copyThrustArray(this->rank_row_ptr[level], h.rank_row_ptr[level]);
-            copyThrustArray(this->rank_col_index[level], h.rank_col_index[level]);
+            copyVector(this->rank_row_ptr[level], h.rank_row_ptr[level]);
+            copyVector(this->rank_col_index[level], h.rank_col_index[level]);
         }
 
         this->depth = h.depth;
@@ -428,16 +425,16 @@ template <class IntVector> struct HNodeTreeBSRData
     {
         // the row pointer should be of size (rows + 1): this is the same as the number
         // of row basis leaf nodes which we can get from the basis tree
-        resizeThrustArray(dense_row_ptr, dense_rows + 1);
+        dense_row_ptr.resize(dense_rows + 1);
 
         // the column pointer should be the same size as the number of dense leaves
-        resizeThrustArray(dense_col_index, dense_nodes);
+        dense_col_index.resize(dense_nodes);
     }
 
     void allocateBSRLevelData(int level, int coupling_nodes, int coupling_rows)
     {
-        resizeThrustArray(rank_row_ptr[level], coupling_rows + 1);
-        resizeThrustArray(rank_col_index[level], coupling_nodes);
+        rank_row_ptr[level].resize(coupling_rows + 1);
+        rank_col_index[level].resize(coupling_nodes);
     }
 
     void printLevelData(int level)

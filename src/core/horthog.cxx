@@ -14,8 +14,6 @@ void horthog_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_
                                     H2Opus_Real *Tu_level, H2Opus_Real *Tv_level, int *node_u_index, int *node_v_index,
                                     size_t increment, HorthogWorkspace &workspace, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     std::vector<int> &new_ranks = workspace.u_new_ranks;
     HNodeTreeLevelData &hnode_level_data = hnodes.level_data;
 
@@ -30,7 +28,10 @@ void horthog_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_
     int level_new_rank = new_ranks[level];
 
     if (level_nodes == 0)
+    {
+        hnodes.rank_leaf_mem[level].resize(0);
         return;
+    }
 
     H2Opus_Real *S_level = vec_ptr(hnodes.rank_leaf_mem[level]);
     H2Opus_Real *S_new_level = S_level;
@@ -43,8 +44,9 @@ void horthog_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_
         copyArray(S_level, realloc_buffer, hnodes.rank_leaf_mem[level].size(), stream, hw);
         S_level = realloc_buffer;
 
-        hnodes.rank_leaf_mem[level] = RealVector(level_nodes * level_new_rank * level_new_rank, 0);
+        hnodes.rank_leaf_mem[level].resize(level_nodes * level_new_rank * level_new_rank);
         S_new_level = vec_ptr(hnodes.rank_leaf_mem[level]);
+        initVector(hnodes.rank_leaf_mem[level], (H2Opus_Real)0, stream);
 
         generateArrayOfPointers(S_new_level, S_new_array, level_new_rank * level_new_rank, level_nodes, stream, hw);
         S_new_array_ptr = S_new_array;
@@ -70,16 +72,18 @@ void horthog_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_
         size_t batch_size = std::min(increment, level_nodes - start_index);
 
         // First calculate TS_{ts} = Tu_{t} S_{ts}
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, level_rank, level_rank, alpha,
-            (const H2Opus_Real **)Tu_array + start_index, level_new_rank, (const H2Opus_Real **)S_array + start_index,
-            level_rank, beta, TS_array, level_new_rank, batch_size));
+        check_kblas_error(
+            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, level_rank,
+                                                   level_rank, alpha, (const H2Opus_Real **)Tu_array + start_index,
+                                                   level_new_rank, (const H2Opus_Real **)S_array + start_index,
+                                                   level_rank, beta, TS_array, level_new_rank, batch_size));
 
         // Now calculate S_{ts} = TS_{ts} * Pv_{t}^t
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-            stream, H2Opus_NoTrans, H2Opus_Trans, level_new_rank, level_new_rank, level_rank, alpha,
-            (const H2Opus_Real **)TS_array, level_new_rank, (const H2Opus_Real **)Tv_array + start_index,
-            level_new_rank, beta, S_new_array_ptr + start_index, level_new_rank, batch_size));
+        check_kblas_error(
+            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, level_new_rank, level_new_rank,
+                                                   level_rank, alpha, (const H2Opus_Real **)TS_array, level_new_rank,
+                                                   (const H2Opus_Real **)Tv_array + start_index, level_new_rank, beta,
+                                                   S_new_array_ptr + start_index, level_new_rank, batch_size));
 
         start_index += batch_size;
     }
@@ -120,7 +124,6 @@ void horthog_upsweep_level_template(TBasisTree<hw> &basis_tree, HorthogWorkspace
                                     std::vector<H2Opus_Real *> &T_hat, std::vector<int> &new_ranks, int level,
                                     h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
     BasisTreeLevelData &level_data = basis_tree.level_data;
 
     // Temporary memory for the products of the projection and transfer matrices
@@ -138,7 +141,10 @@ void horthog_upsweep_level_template(TBasisTree<hw> &basis_tree, HorthogWorkspace
     size_t num_nodes = level_data.getLevelSize(level);
 
     if (child_rank == 0 || level_rank == 0)
+    {
+        basis_tree.trans_mem[level + 1].resize(0);
         return;
+    }
 
     int te_rows = max_children * child_new_rank;
     int level_new_rank = level_rank;
@@ -156,7 +162,8 @@ void horthog_upsweep_level_template(TBasisTree<hw> &basis_tree, HorthogWorkspace
 
         assert(level_new_rank == new_ranks[level]);
 
-        basis_tree.trans_mem[level + 1] = RealVector(num_children * child_new_rank * level_new_rank, 0);
+        basis_tree.trans_mem[level + 1].resize(num_children * child_new_rank * level_new_rank);
+        initVector(basis_tree.trans_mem[level + 1], (H2Opus_Real)0, stream);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -221,8 +228,6 @@ template <int hw>
 void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspace &workspace,
                                      std::vector<H2Opus_Real *> &T_hat, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     BasisTreeLevelData &level_data = basis_tree.level_data;
 
     size_t num_leaves = level_data.basis_leaves;
@@ -231,7 +236,10 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
     int leaf_level = level_data.depth - 1;
 
     if (leaf_rank == 0)
+    {
+        basis_tree.basis_mem.resize(0);
         return;
+    }
 
     H2Opus_Real *basis_leaves = vec_ptr(basis_tree.basis_mem);
     H2Opus_Real *realloc_buffer = workspace.realloc_buffer;
@@ -244,7 +252,8 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
         copyArray(basis_leaves, realloc_buffer, basis_tree.basis_mem.size(), stream, hw);
         basis_leaves = realloc_buffer;
         leaf_new_rank = leaf_rows;
-        basis_tree.basis_mem = RealVector(num_leaves * leaf_rows * leaf_rows, 0);
+        basis_tree.basis_mem.resize(num_leaves * leaf_rows * leaf_rows);
+        initVector(basis_tree.basis_mem, (H2Opus_Real)0, stream);
     }
 
     // QR for the leaves - leaves are overwritten with the househoulder vectors
@@ -255,9 +264,10 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
     // Save the R factors from the leaves so that we can unpack the full Q
     H2Opus_Real *T_hat_leaf = T_hat[leaf_level];
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(
-        stream, leaf_rows, leaf_rank, basis_leaves, leaf_rows, leaf_rows * leaf_rank, T_hat_leaf, leaf_new_rank,
-        leaf_new_rank * leaf_rank, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(stream, leaf_rows, leaf_rank, basis_leaves,
+                                                                   leaf_rows, leaf_rows * leaf_rank, T_hat_leaf,
+                                                                   leaf_new_rank, leaf_new_rank * leaf_rank,
+                                                                   num_leaves));
     // Now unpack the Q factor from the stored househoulder vectors
     check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::orgqr)(stream, leaf_rows, leaf_rank, basis_leaves, leaf_rows,
                                                               leaf_rows * leaf_rank, tau, leaf_rank, num_leaves));
@@ -267,9 +277,10 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
     {
         H2Opus_Real *truncated_leaves = vec_ptr(basis_tree.basis_mem);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-            stream, leaf_rows, leaf_new_rank, truncated_leaves, 0, 0, leaf_rows, leaf_rows * leaf_new_rank,
-            basis_leaves, 0, 0, leaf_rows, leaf_rows * leaf_rank, num_leaves));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, leaf_rows, leaf_new_rank,
+                                                                      truncated_leaves, 0, 0, leaf_rows,
+                                                                      leaf_rows * leaf_new_rank, basis_leaves, 0, 0,
+                                                                      leaf_rows, leaf_rows * leaf_rank, num_leaves));
     }
 }
 
@@ -277,8 +288,6 @@ template <int hw>
 void horthog_stitch_template(TBasisTree<hw> &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
                              std::vector<int> &new_ranks, h2opusComputeStream_t stream)
 {
-    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
-
     BasisTreeLevelData &level_data = basis_tree.level_data;
 
     int top_level = level_data.nested_root_level;
@@ -299,22 +308,29 @@ void horthog_stitch_template(TBasisTree<hw> &basis_tree, HorthogWorkspace &works
 
     // Check if we need to resize the projected level
     if (level_new_rank < level_rank)
-        basis_tree.trans_mem[top_level] = RealVector(num_nodes * level_new_rank * parent_rank, 0);
+    {
+        basis_tree.trans_mem[top_level].resize(num_nodes * level_new_rank * parent_rank);
+        initVector(basis_tree.trans_mem[top_level], (H2Opus_Real)0, stream);
+    }
 
-    H2Opus_Real *projected_level = vec_ptr(basis_tree.trans_mem[top_level]);
+    if (level_new_rank != 0)
+    {
+        H2Opus_Real *projected_level = vec_ptr(basis_tree.trans_mem[top_level]);
 
-    H2Opus_Real **ptr_T = workspace.ptr_T, **ptr_E = workspace.ptr_E, **ptr_TE = workspace.ptr_TE;
-    generateArrayOfPointers(T_hat_level, ptr_T, level_new_rank * level_rank, num_nodes, stream, hw);
-    generateArrayOfPointers(old_level, ptr_E, level_rank * parent_rank, num_nodes, stream, hw);
-    generateArrayOfPointers(projected_level, ptr_TE, level_new_rank * parent_rank, num_nodes, stream, hw);
+        H2Opus_Real **ptr_T = workspace.ptr_T, **ptr_E = workspace.ptr_E, **ptr_TE = workspace.ptr_TE;
+        generateArrayOfPointers(T_hat_level, ptr_T, level_new_rank * level_rank, num_nodes, stream, hw);
+        generateArrayOfPointers(old_level, ptr_E, level_rank * parent_rank, num_nodes, stream, hw);
+        generateArrayOfPointers(projected_level, ptr_TE, level_new_rank * parent_rank, num_nodes, stream, hw);
 
-    H2Opus_Real alpha = 1, beta = 0;
+        H2Opus_Real alpha = 1, beta = 0;
 
-    // E = T * E
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, parent_rank, level_rank, alpha,
-        (const H2Opus_Real **)ptr_T, level_new_rank, (const H2Opus_Real **)ptr_E, level_rank, beta, ptr_TE,
-        level_new_rank, num_nodes));
+        // E = T * E
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank,
+                                                                 parent_rank, level_rank, alpha,
+                                                                 (const H2Opus_Real **)ptr_T, level_new_rank,
+                                                                 (const H2Opus_Real **)ptr_E, level_rank, beta, ptr_TE,
+                                                                 level_new_rank, num_nodes));
+    }
 
     // Copy over the ranks above the current top level
     for (int i = top_level - 1; i >= 0; i--)
@@ -358,7 +374,7 @@ template <int hw> void horthog_template(THMatrix<hw> &hmatrix, h2opusHandle_t h2
         horthog_upsweep_leaves_template<hw>(hmatrix.v_basis_tree, workspace, workspace.Tv_hat, main_stream);
 #ifdef H2OPUS_PROFILING_ENABLED
     double leaf_timer = timer.stop();
-    double leaf_gops = PerformanceCounter::getOpCount(PerformanceCounter::QR);
+    double leaf_gops = PerformanceCounter::getOpCount();
     HLibProfile::addRun(HLibProfile::HORTHOG_BASIS_LEAVES, leaf_gops, leaf_timer);
     PerformanceCounter::clearCounters();
 #endif
@@ -376,8 +392,7 @@ template <int hw> void horthog_template(THMatrix<hw> &hmatrix, h2opusHandle_t h2
                                      main_stream);
 #ifdef H2OPUS_PROFILING_ENABLED
     double upsweep_timer = timer.stop();
-    double upsweep_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM) +
-                          PerformanceCounter::getOpCount(PerformanceCounter::QR);
+    double upsweep_gops = PerformanceCounter::getOpCount();
     HLibProfile::addRun(HLibProfile::HORTHOG_UPSWEEP, upsweep_gops, upsweep_timer);
     PerformanceCounter::clearCounters();
 #endif
@@ -396,7 +411,7 @@ template <int hw> void horthog_template(THMatrix<hw> &hmatrix, h2opusHandle_t h2
 
 #ifdef H2OPUS_PROFILING_ENABLED
     double stitch_timer = timer.stop();
-    double stitch_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
+    double stitch_gops = PerformanceCounter::getOpCount();
     HLibProfile::addRun(HLibProfile::HORTHOG_STITCH, stitch_gops, stitch_timer);
     PerformanceCounter::clearCounters();
 #endif
@@ -414,7 +429,7 @@ template <int hw> void horthog_template(THMatrix<hw> &hmatrix, h2opusHandle_t h2
 
 #ifdef H2OPUS_PROFILING_ENABLED
     double proj_timer = timer.stop();
-    double proj_gops = PerformanceCounter::getOpCount(PerformanceCounter::GEMM);
+    double proj_gops = PerformanceCounter::getOpCount();
     HLibProfile::addRun(HLibProfile::HORTHOG_PROJECTION, proj_gops, proj_timer);
     PerformanceCounter::clearCounters();
 #endif
@@ -431,6 +446,8 @@ template <int hw> void horthog_template(THMatrix<hw> &hmatrix, h2opusHandle_t h2
     // workspace.u_new_ranks[i]); printf("\n");
 
     u_level_data.setLevelRanks(vec_ptr(workspace.u_new_ranks));
+    if (!hmatrix.sym)
+        v_level_data.setLevelRanks(vec_ptr(workspace.v_new_ranks));
     hnode_level_data.setRankFromBasis(u_level_data, 0);
 }
 
@@ -458,6 +475,12 @@ void horthog_upsweep(BasisTree &basis_tree, HorthogWorkspace &workspace, std::ve
                      std::vector<int> &new_ranks, h2opusComputeStream_t stream)
 {
     horthog_upsweep_template<H2OPUS_HWTYPE_CPU>(basis_tree, workspace, T_hat, new_ranks, stream);
+}
+
+void horthog_stitch(BasisTree &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
+                    std::vector<int> &new_ranks, h2opusComputeStream_t stream)
+{
+    horthog_stitch_template<H2OPUS_HWTYPE_CPU>(basis_tree, workspace, T_hat, new_ranks, stream);
 }
 
 void horthog_project(HNodeTree &hnodes, int start_level, int end_level, BasisTreeLevelData &u_level_data,
@@ -497,6 +520,12 @@ void horthog_upsweep(BasisTree_GPU &basis_tree, HorthogWorkspace &workspace, std
                      std::vector<int> &new_ranks, h2opusComputeStream_t stream)
 {
     horthog_upsweep_template<H2OPUS_HWTYPE_GPU>(basis_tree, workspace, T_hat, new_ranks, stream);
+}
+
+void horthog_stitch(BasisTree_GPU &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
+                    std::vector<int> &new_ranks, h2opusComputeStream_t stream)
+{
+    horthog_stitch_template<H2OPUS_HWTYPE_GPU>(basis_tree, workspace, T_hat, new_ranks, stream);
 }
 
 void horthog_project(HNodeTree_GPU &hnodes, int start_level, int end_level, BasisTreeLevelData &u_level_data,

@@ -94,8 +94,10 @@ void hlru_update_coupling_matrices(THNodeTree<hw> &hnodes, int update_level, int
 
         int new_rank = update_rank + level_rank;
 
-        RealVector old_coupling_level = hnodes.rank_leaf_mem[level];
-        hnodes.rank_leaf_mem[level] = RealVector(level_nodes * new_rank * new_rank, 0);
+        RealVector old_coupling_level;
+        copyVector(old_coupling_level, hnodes.rank_leaf_mem[level]);
+        hnodes.rank_leaf_mem[level].resize(level_nodes * new_rank * new_rank);
+        initVector(hnodes.rank_leaf_mem[level], (H2Opus_Real)0, stream);
 
         // Copy the original data into the appropriate sub-block of the new coupling matrices
         generateArrayOfPointers(vec_ptr(old_coupling_level), vec_ptr(original_node_ptrs), level_rank * level_rank,
@@ -103,9 +105,10 @@ void hlru_update_coupling_matrices(THNodeTree<hw> &hnodes, int update_level, int
         generateArrayOfPointers(vec_ptr(hnodes.rank_leaf_mem[level]), vec_ptr(new_node_ptrs), new_rank * new_rank,
                                 level_nodes, stream, hw);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-            stream, level_rank, level_rank, vec_ptr(new_node_ptrs), 0, 0, new_rank, vec_ptr(original_node_ptrs), 0, 0,
-            level_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, level_rank, level_rank,
+                                                                      vec_ptr(new_node_ptrs), 0, 0, new_rank,
+                                                                      vec_ptr(original_node_ptrs), 0, 0, level_rank,
+                                                                      level_nodes));
 
         // Now we need to reduce the pointer array to include just the flagged hnodes
         int flagged_nodes = hlru_flagged_coupling_marshal_batch<H2Opus_Real, hw>(
@@ -138,8 +141,10 @@ void hlru_update_basis_leaves(TBasisTree<hw> &basis_tree, H2Opus_Real **basis_up
     int leaf_start, leaf_end;
     level_data.getLevelRange(num_levels - 1, leaf_start, leaf_end);
 
-    RealVector old_basis_leaves = basis_tree.basis_mem;
-    basis_tree.basis_mem = RealVector(num_leaves * leaf_size * new_rank, 0);
+    RealVector old_basis_leaves;
+    copyVector(old_basis_leaves, basis_tree.basis_mem);
+    basis_tree.basis_mem.resize(num_leaves * leaf_size * new_rank);
+    initVector(basis_tree.basis_mem, (H2Opus_Real)0, stream);
 
     RealPointerArray dest_ptrs(num_leaves), origin_ptrs(num_leaves);
     RealPointerArray flagged_dest_ptrs(num_leaves), flagged_origin_ptrs(num_leaves);
@@ -156,7 +161,7 @@ void hlru_update_basis_leaves(TBasisTree<hw> &basis_tree, H2Opus_Real **basis_up
                                                                   0, leaf_size, vec_ptr(origin_ptrs), 0, 0, leaf_size,
                                                                   num_leaves));
 
-    // Genereate pointers for the flagged nodes
+    // Generate pointers for the flagged nodes
     fillArray(vec_ptr(ld_dest_array), num_leaves, leaf_size, stream, hw);
     fillArray(vec_ptr(ld_src_array), num_leaves, update_ld, stream, hw);
 
@@ -166,9 +171,10 @@ void hlru_update_basis_leaves(TBasisTree<hw> &basis_tree, H2Opus_Real **basis_up
         update_rank, leaf_start, num_leaves, stream);
 
     // Copy over the flagged blocks
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-        stream, vec_ptr(rows_array), vec_ptr(cols_array), leaf_size, update_rank, vec_ptr(flagged_dest_ptrs),
-        vec_ptr(ld_dest_array), vec_ptr(flagged_origin_ptrs), vec_ptr(ld_src_array), flagged_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, vec_ptr(rows_array), vec_ptr(cols_array),
+                                                                  leaf_size, update_rank, vec_ptr(flagged_dest_ptrs),
+                                                                  vec_ptr(ld_dest_array), vec_ptr(flagged_origin_ptrs),
+                                                                  vec_ptr(ld_src_array), flagged_nodes));
 }
 
 template <int hw>
@@ -199,8 +205,10 @@ void hlru_update_transfer_matrices(TBasisTree<hw> &basis_tree, int rank, int upd
         if (level == update_level)
             new_cols = cols;
 
-        RealVector old_transfer_level = basis_tree.trans_mem[level];
-        basis_tree.trans_mem[level] = RealVector(level_nodes * new_rows * new_cols, 0);
+        RealVector old_transfer_level;
+        copyVector(old_transfer_level, basis_tree.trans_mem[level]);
+        basis_tree.trans_mem[level].resize(level_nodes * new_rows * new_cols);
+        initVector(basis_tree.trans_mem[level], (H2Opus_Real)0, stream);
 
         // Copy the original blocks
         generateArrayOfPointers(vec_ptr(old_transfer_level), vec_ptr(origin_ptrs), rows * cols, level_nodes, stream,
@@ -208,8 +216,9 @@ void hlru_update_transfer_matrices(TBasisTree<hw> &basis_tree, int rank, int upd
         generateArrayOfPointers(vec_ptr(basis_tree.trans_mem[level]), vec_ptr(dest_ptrs), new_rows * new_cols,
                                 level_nodes, stream, hw);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
-            stream, rows, cols, vec_ptr(dest_ptrs), 0, 0, new_rows, vec_ptr(origin_ptrs), 0, 0, rows, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, rows, cols, vec_ptr(dest_ptrs), 0, 0,
+                                                                      new_rows, vec_ptr(origin_ptrs), 0, 0, rows,
+                                                                      level_nodes));
 
         // Set the lower right block to the identity matrix
         if (level != update_level)
@@ -254,11 +263,13 @@ void hlru_update_dense_blocks(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_basis_tr
         basis_update_col, hnode_update_index, num_dense_leaves, stream);
 
     // M += U * V^T
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-        stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array), vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim,
-        dense_dim, rank, (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(flagged_u_ptrs), vec_ptr(ldu_array),
-        (const H2Opus_Real **)vec_ptr(flagged_v_ptrs), vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(flagged_m_ptrs),
-        vec_ptr(ldm_array), flagged_blocks));
+    check_kblas_error(
+        (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array),
+                                               vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim, dense_dim, rank,
+                                               (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(flagged_u_ptrs),
+                                               vec_ptr(ldu_array), (const H2Opus_Real **)vec_ptr(flagged_v_ptrs),
+                                               vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(flagged_m_ptrs),
+                                               vec_ptr(ldm_array), flagged_blocks));
 }
 
 template <int hw> void hlru_init_temp_data(THMatrix<hw> &hmatrix, TLowRankUpdate<hw> &update)

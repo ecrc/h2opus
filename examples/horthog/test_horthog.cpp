@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     if (!arg_parser.valid() || print_help)
     {
         arg_parser.printUsage();
-        exit(0);
+        return 0;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -128,6 +128,7 @@ int main(int argc, char **argv)
     ws_needed = horthog_workspace(gpu_h);
     h2opus_handle->setWorkspaceState(ws_needed);
 
+    HLibProfile::clear();
     for (int i = 0; i < runs; i++)
     {
         gpu_h = hmatrix;

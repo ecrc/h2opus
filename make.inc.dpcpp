@@ -1,0 +1,26 @@
+# Example configuration using DPCPP
+
+# Compiler flags
+CXX = dpcpp
+CXXFLAGS = -O0 -g -fPIC -Wall -qopenmp
+CXXCPPFLAGS = -DH2OPUS_PROFILING_ENABLED
+
+# Thrust using TBB (defaults to OpenMP)
+# CXXCPPFLAGS += -DH2OPUS_USE_TBB
+THRUST_INCDIR = $(THRUST_DIR)/include
+
+# Enable MKL batched API
+CXXCPPFLAGS += -DH2OPUS_USE_BATCHED_BLAS
+
+# Enable shared library build
+H2OPUS_ENABLE_SHARED = 1
+SL_FLAGS = -shared -fPIC
+
+# Use MKL (dpcpp links against ilp64 specifying -qmkl!)
+# Explicit linking from https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/onemkl/link-line-advisor.html 
+H2OPUS_USE_MKL = 1
+# BLAS_LIBS = -Wl,-rpath,${MKLROOT}/lib/intel64  -L${MKLROOT}/lib/intel64 -lmkl_sycl -lmkl_intel_lp64 -lmkl_tbb_thread -lmkl_core -lsycl -lOpenCL -lpthread -lm -ldl -qtbb
+BLAS_LIBS = -Wl,-rpath,${MKLROOT}/lib/intel64  -L${MKLROOT}/lib/intel64 -lmkl_sycl -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread -lm -ldl
+
+# Resolve missing symbols
+LDFLAGS = -qopenmp

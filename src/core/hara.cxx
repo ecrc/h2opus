@@ -4,6 +4,7 @@
 #include <h2opus/core/horthog.h>
 
 #include <h2opus/util/debug_routines.h>
+#include <h2opus/util/vector_operations.h>
 #include <h2opus/util/gpu_err_check.h>
 #include <h2opus/util/timer.h>
 
@@ -22,11 +23,14 @@ void hara_template(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_rank,
 
     int depth = hmatrix.u_basis_tree.depth;
     int n = hmatrix.n;
+    h2opusComputeStream_t main_stream = h2opus_handle->getMainStream();
 
     // We reuse the samples workspace to construct the dense diagonal leaves
-    // so make sure we have enough memory to accomodate that update
+    // so make sure we have enough memory to accommodate that update
     int sample_ws_cols = std::max(max_rank, hmatrix.u_basis_tree.leaf_size);
-    RealVector sampled_U(n * sample_ws_cols, 0), sampled_V(n * sample_ws_cols, 0);
+    RealVector sampled_U(n * sample_ws_cols), sampled_V(n * sample_ws_cols);
+    initVector(sampled_U, (H2Opus_Real)0, main_stream);
+    initVector(sampled_V, (H2Opus_Real)0, main_stream);
 
     TLowRankUpdate<hw> low_rank_update;
     TWeightAccelerationPacket<hw> packet(0, 0, 0);

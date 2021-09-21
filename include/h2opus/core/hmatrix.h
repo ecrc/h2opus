@@ -23,6 +23,17 @@ template <int hw> struct THMatrix
         this->sym = symmetric;
     }
 
+    THMatrix(const THMatrix &h)
+    {
+        init(h);
+    }
+
+    THMatrix &operator=(const THMatrix &h)
+    {
+        init(h);
+        return *this;
+    }
+
     template <int other_hw> THMatrix(const THMatrix<other_hw> &h)
     {
         init(h);

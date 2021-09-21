@@ -63,13 +63,13 @@ void drawHmatrix(Board &board, HMatrix &hmatrix, float width, float height, int 
             // if(u_index - u_start_index > v_index - v_start_index)
             //    display_index = hmatrix.hnodes.getHNodeIndex(level, v_index - v_start_index, u_index - u_start_index);
 
-            if (node_type == HMATRIX_DENSE_MATRIX)
+            if (node_type == H2OPUS_HMATRIX_DENSE_MATRIX)
             {
                 float c_inner[4] = {1, 0, 0, 1};
                 board.setPenColorRGBf(c_inner[0], c_inner[1], c_inner[2], c_inner[3]);
                 board.fillRectangle(node_x, node_y, node_width, node_height, 2);
             }
-            else if (node_type == HMATRIX_RANK_MATRIX)
+            else if (node_type == H2OPUS_HMATRIX_RANK_MATRIX)
             {
                 float c_inner[4] = {0.1, 1.0, 0.1, 1};
                 // float c_inner[4] = {0.1, 0.1, 1.0, 1};
@@ -85,7 +85,7 @@ void drawHmatrix(Board &board, HMatrix &hmatrix, float width, float height, int 
                 board.fillRectangle(node_x, node_y, node_width, node_height, 2);
             }
 
-            if (node_type == HMATRIX_DENSE_MATRIX || node_type == HMATRIX_RANK_MATRIX || draw_level != -1)
+            if (node_type == H2OPUS_HMATRIX_DENSE_MATRIX || node_type == H2OPUS_HMATRIX_RANK_MATRIX || draw_level != -1)
             {
                 float c_border[4] = {0, 0, 0, 1};
                 board.setPenColorRGBf(c_border[0], c_border[1], c_border[2], c_border[3]);
@@ -193,7 +193,7 @@ void drawHmatrix(std::ostream &out, HMatrix &hmatrix, float scale, int draw_leve
             // if(u_index - u_start_index > v_index - v_start_index)
             //    display_index = hmatrix.hnodes.getHNodeIndex(level, v_index - v_start_index, u_index - u_start_index);
 
-            if (node_type == HMATRIX_DENSE_MATRIX)
+            if (node_type == H2OPUS_HMATRIX_DENSE_MATRIX)
             {
                 std::stringstream stream;
                 stream << col_start << "," << cols;
@@ -204,7 +204,7 @@ void drawHmatrix(std::ostream &out, HMatrix &hmatrix, float scale, int draw_leve
                             //, stream.str().c_str(), 12, node_x + node_width / 2, node_y - node_height / 2
                 );
             }
-            else if (node_type == HMATRIX_RANK_MATRIX)
+            else if (node_type == H2OPUS_HMATRIX_RANK_MATRIX)
             {
                 float c_fill[4] = {0.1, 1.0, 0.1, 1};
                 psPrintRect(out, node_x, node_y, node_width, node_height, c_border[0], c_border[1], c_border[2],
@@ -341,10 +341,10 @@ template <class T> void printDenseMatrixHost(T *matrix, int ldm, int m, int n, i
     assert(ldm >= m);
 
     sprintf(format, "%%.%de ", digits);
-#ifdef H2OPUS_DOUBLE_PRECISION
-    printf("%s = ([\n", name);
-#else
-    printf("%s = single([\n", name);
+#ifdef H2OPUS_USE_DOUBLE_PRECISION
+    printf("%s = ([\n", name ? name : "mat");
+#elif defined(H2OPUS_USE_SINGLE_PRECISION)
+    printf("%s = single([\n", name ? name : "mat");
 #endif
     for (int i = 0; i < m; i++)
     {
@@ -363,10 +363,42 @@ template <class T> void printDenseMatrixT(T *matrix, int ldm, int m, int n, int 
     else
     {
         thrust::host_vector<T> host_matrix = copyGPUBlock(matrix, ldm, m, n);
-        printDenseMatrixHost<T>(vec_ptr(host_matrix), ldm, m, n, digits, name);
+        printDenseMatrixHost<T>(vec_ptr(host_matrix), m, m, n, digits, name);
     }
 #endif
 }
+
+template <typename T> void printThrustVectorT(thrust::host_vector<T> &vec)
+{
+    thrust::copy(vec.begin(), vec.end(), std::ostream_iterator<T>(std::cout, "\n"));
+}
+
+#ifdef H2OPUS_USE_GPU
+template <typename T> void printThrustVectorT(thrust::device_vector<T> &vec)
+{
+    thrust::copy(vec.begin(), vec.end(), std::ostream_iterator<T>(std::cout, "\n"));
+}
+#endif
+
+void printThrustVector(thrust::host_vector<float> &v)
+{
+    return printThrustVectorT(v);
+}
+void printThrustVector(thrust::host_vector<double> &v)
+{
+    return printThrustVectorT(v);
+}
+
+#ifdef H2OPUS_USE_GPU
+void printThrustVector(thrust::device_vector<float> &v)
+{
+    return printThrustVectorT(v);
+}
+void printThrustVector(thrust::device_vector<double> &v)
+{
+    return printThrustVectorT(v);
+}
+#endif
 
 void printDenseMatrix(float *matrix, int ldm, int m, int n, int digits, const char *name, int hw)
 {
@@ -427,7 +459,7 @@ H2Opus_Real frobeniusNorm(H2Opus_Real *m, int rows, int cols)
 H2Opus_Real orthogonality(H2Opus_Real *matrix, int ld, int m, int n)
 {
     std::vector<H2Opus_Real> prod(n * n, 0);
-    cblas_gemm(CblasTrans, CblasNoTrans, n, n, m, 1, matrix, ld, matrix, ld, 0, &prod[0], n);
+    h2opus_fbl_gemm(H2OpusFBLTrans, H2OpusFBLNoTrans, n, n, m, 1, matrix, ld, matrix, ld, 0, &prod[0], n);
     return orthogError(&prod[0], n);
 }
 
@@ -444,13 +476,16 @@ H2Opus_Real getBasisOrthogonality(BasisTree &basis_tree, bool print_per_level)
     int leaf_rank = basis_tree.getLevelRank(basis_tree.depth - 1);
     int leaf_size = basis_tree.leaf_size;
 
-    for (int leaf = 0; leaf < basis_tree.basis_leaves; leaf++)
+    if (leaf_rank != 0)
     {
-        H2Opus_Real *u_leaf = basis_tree.getBasisLeaf(leaf);
+        for (int leaf = 0; leaf < basis_tree.basis_leaves; leaf++)
+        {
+            H2Opus_Real *u_leaf = basis_tree.getBasisLeaf(leaf);
 
-        if (frobeniusNorm(u_leaf, leaf_size, leaf_rank) < H2OpusEpsilon<H2Opus_Real>::eps)
-            continue;
-        orthog += orthogonality(u_leaf, leaf_size, leaf_rank);
+            if (frobeniusNorm(u_leaf, leaf_size, leaf_rank) < H2OpusEpsilon<H2Opus_Real>::eps)
+                continue;
+            orthog += orthogonality(u_leaf, leaf_size, leaf_rank);
+        }
     }
     if (print_per_level && basis_tree.basis_leaves != 0)
         printf("Level %d: %e\n", basis_tree.depth - 1, orthog / basis_tree.basis_leaves);
@@ -668,14 +703,14 @@ void dumpHgemvTreeContainer(BasisTreeLevelData &level_data, std::vector<H2Opus_R
     printf(" ];\n");
 }
 
-void dumpCouplingMatrices(HMatrix &hmatrix, int digits)
+void dumpCouplingMatrices(HMatrix &hmatrix, int digits, FILE *fp)
 {
     char format[64];
     sprintf(format, "%%.%de ", digits);
     BasisTree &u_basis_tree = hmatrix.u_basis_tree;
     BasisTree &v_basis_tree = (hmatrix.sym ? u_basis_tree : hmatrix.v_basis_tree);
 
-    printf("Rank Matrices [\n");
+    fprintf(fp, "Rank Matrices [\n");
     for (int level = 0; level < hmatrix.hnodes.depth; level++)
     {
         int rank = hmatrix.hnodes.getLevelRank(level);
@@ -691,22 +726,22 @@ void dumpCouplingMatrices(HMatrix &hmatrix, int digits)
             int u_1 = u_basis_tree.node_start[u_index], v_1 = v_basis_tree.node_start[v_index];
             int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
 
-            printf("\tNode %d Tree Index: %d : [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
-            printf("\n");
+            fprintf(fp, "\tNode %d Tree Index: %d : [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
+            fprintf(fp, "\n");
             for (int i = 0; i < rank; i++)
             {
                 for (int j = 0; j < rank; j++)
                 {
                     int local_index = i + j * rank;
-                    printf(format, entries[local_index]);
+                    fprintf(fp, format, entries[local_index]);
                 }
-                printf("\n");
+                fprintf(fp, "\n");
                 if (i != rank - 1)
-                    printf("\t\t");
+                    fprintf(fp, "\t\t");
             }
         }
     }
-    printf("];\n");
+    fprintf(fp, "];\n");
 }
 
 void printMatrixTreeStructure(HMatrix &hmatrix)
@@ -868,7 +903,9 @@ void dumpTransferLevel(BasisTree &basis_tree, int digits, int level)
     for (int node = level_start; node < level_end; node++)
     {
         H2Opus_Real *utrans = basis_tree.getTransNode(level, node - level_start);
-        printf("\tNode %d\n\t\t", node);
+        int node_start = basis_tree.node_start[node], node_end = node_start + basis_tree.node_len[node];
+
+        printf("\tNode %d Level %d [%d; %d]\n\t\t", node, level, node_start, node_end);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -882,18 +919,18 @@ void dumpTransferLevel(BasisTree &basis_tree, int digits, int level)
     }
 }
 
-void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label)
+void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label, FILE *fp)
 {
     char format[64];
     sprintf(format, "%%.%de ", digits);
 
     // Now the basis vectors
-    printf("%s Trans [\n", label);
+    fprintf(fp, "%s Trans [\n", label);
     for (int level = 0; level < basis_tree.depth; level++)
         dumpTransferLevel(basis_tree, digits, level);
-    printf("]\n");
+    fprintf(fp, "]\n");
 
-    printf("%s Basis [\n", label);
+    fprintf(fp, "%s Basis [\n", label);
     int leaf_start = basis_tree.getLevelStart(basis_tree.depth - 1);
     int leaf_rank = basis_tree.getLevelRank(basis_tree.depth - 1);
     int ld = basis_tree.leaf_size;
@@ -901,34 +938,35 @@ void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label)
     for (int leaf = 0; leaf < basis_tree.basis_leaves; leaf++)
     {
         int node_id = leaf + leaf_start;
-        printf("\tNode %d: [%d; %d] \n\t\t", node_id, basis_tree.node_start[node_id],
-               basis_tree.node_start[node_id] + basis_tree.node_len[node_id]);
+        fprintf(fp, "\tNode %d: [%d; %d] \n\t\t", node_id, basis_tree.node_start[node_id],
+                basis_tree.node_start[node_id] + basis_tree.node_len[node_id]);
         H2Opus_Real *u_leaf = basis_tree.getBasisLeaf(leaf);
 
         for (int i = 0; i < basis_tree.node_len[node_id]; i++)
         {
             for (int j = 0; j < leaf_rank; j++)
             {
-                printf(format, u_leaf[i + j * ld]);
+                fprintf(fp, format, u_leaf[i + j * ld]);
             }
-            printf("\n");
+            fprintf(fp, "\n");
             if (i != basis_tree.node_len[node_id] - 1)
-                printf("\t\t");
+                fprintf(fp, "\t\t");
         }
     }
-    printf("]\n");
+    fprintf(fp, "]\n");
 }
 
-void dumpHMatrix(HMatrix &hmatrix, int digits)
+void dumpHMatrix(HMatrix &hmatrix, int digits, FILE *fp)
 {
     char format[64];
     sprintf(format, "%%.%de ", digits);
 
     BasisTree &u_basis_tree = hmatrix.u_basis_tree;
     BasisTree &v_basis_tree = (hmatrix.sym ? u_basis_tree : hmatrix.v_basis_tree);
-
+    if (!fp)
+        fp = stdout;
     // First dump out the dense matrices
-    printf("Dense Matrices [\n");
+    fprintf(fp, "Dense Matrices [\n");
     for (int leaf = 0; leaf < hmatrix.hnodes.num_dense_leaves; leaf++)
     {
         int tree_index = hmatrix.hnodes.dense_leaf_tree_index[leaf];
@@ -941,25 +979,25 @@ void dumpHMatrix(HMatrix &hmatrix, int digits)
 
         int ld = hmatrix.u_basis_tree.leaf_size;
 
-        printf("\tNode %d (%d): [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
+        fprintf(fp, "\tNode %d (%d): [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
         for (int i = u_1; i <= u_2; i++)
         {
             for (int j = v_1; j <= v_2; j++)
             {
                 int local_index = (i - u_1) + (j - v_1) * ld;
-                printf(format, m[local_index]);
+                fprintf(fp, format, m[local_index]);
             }
-            printf("\n");
+            fprintf(fp, "\n");
             if (i != u_2)
-                printf("\t\t");
+                fprintf(fp, "\t\t");
         }
     }
-    printf("];\n");
+    fprintf(fp, "];\n");
 
-    dumpCouplingMatrices(hmatrix, digits);
-    dumpBasisTree(u_basis_tree, digits, "UTree");
+    dumpCouplingMatrices(hmatrix, digits, fp);
+    dumpBasisTree(u_basis_tree, digits, "UTree", fp);
     if (!hmatrix.sym)
-        dumpBasisTree(v_basis_tree, digits, "VTree");
+        dumpBasisTree(v_basis_tree, digits, "VTree", fp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1011,8 +1049,8 @@ void expandBasis(BasisTree &basis_tree, int node_index, H2Opus_Real *matrices, i
 
                 H2Opus_Real *trans = basis_tree.getTransNode(depth + 1, child_index);
 
-                cblas_gemm(CblasNoTrans, CblasNoTrans, child_len, level_rank, child_rank, 1, child_matrix, n, trans,
-                           child_rank, 0, parent_matrix, n);
+                h2opus_fbl_gemm(H2OpusFBLNoTrans, H2OpusFBLNoTrans, child_len, level_rank, child_rank, 1, child_matrix,
+                                n, trans, child_rank, 0, parent_matrix, n);
             }
 
             child = basis_tree.next[child];
@@ -1056,14 +1094,17 @@ void expandHmatrix(HMatrix &hmatrix, H2Opus_Real *matrix, int dense, int couplin
 
     // Now expand the basis trees
     int max_rank = hmatrix.u_basis_tree.level_data.getLargestRank();
-
-    H2Opus_Real *u_matrices = (H2Opus_Real *)malloc(sizeof(H2Opus_Real) * hmatrix.n * max_rank * u_basis_tree.depth);
-    H2Opus_Real *v_matrices = (H2Opus_Real *)malloc(sizeof(H2Opus_Real) * hmatrix.n * max_rank * v_basis_tree.depth);
+    size_t u_mem = sizeof(H2Opus_Real) * hmatrix.n * max_rank * u_basis_tree.depth;
+    size_t v_mem = sizeof(H2Opus_Real) * hmatrix.n * max_rank * v_basis_tree.depth;
+    H2Opus_Real *u_matrices = (H2Opus_Real *)malloc(u_mem);
+    H2Opus_Real *v_matrices = (H2Opus_Real *)malloc(v_mem);
 
     assert(u_matrices && v_matrices);
 
-    expandBasis(u_basis_tree, 0, u_matrices, 0, hmatrix.n, max_rank);
-    expandBasis(v_basis_tree, 0, v_matrices, 0, hmatrix.n, max_rank);
+    if (u_mem)
+        expandBasis(u_basis_tree, 0, u_matrices, 0, hmatrix.n, max_rank);
+    if (v_mem)
+        expandBasis(v_basis_tree, 0, v_matrices, 0, hmatrix.n, max_rank);
 
     for (int level = 0; level < hmatrix.hnodes.depth; level++)
     {

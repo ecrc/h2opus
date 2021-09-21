@@ -1,13 +1,12 @@
 #ifndef __GPU_UTIL_H__
 #define __GPU_UTIL_H__
 
+#include <h2opus/core/h2opus_defs.h>
+#include <h2opus/util/gpu_err_check.h>
 #include <assert.h>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <cusparse.h>
-
-#include <h2opus/core/h2opus_defs.h>
-#include <h2opus/util/gpu_err_check.h>
 
 #define WARP_SIZE 32
 #define MAX_OPS_PER_BATCH 65535

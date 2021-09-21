@@ -7,6 +7,7 @@
 #include <h2opus/util/debug_routines.h>
 #include <h2opus/util/gpu_err_check.h>
 #include <h2opus/util/thrust_wrappers.h>
+#include <h2opus/util/vector_operations.h>
 
 template <int hw>
 void sampleLevel(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int rank, H2Opus_Real *input, H2Opus_Real *output,
@@ -87,9 +88,18 @@ void hara_weak_admissibility_low_rank_update_template(HMatrixSampler *sampler, T
         BS = 16;
 
     // ARA temporary workspace
-    IntVector node_ranks(level_nodes, 0), op_samples(level_nodes, max_rank);
-    IntVector block_ranks(level_nodes, 0), small_vectors(level_nodes, 0);
-    IntVector ldu_batch(level_nodes, n), ldz_batch(level_nodes, max_rank);
+    IntVector node_ranks(level_nodes), op_samples(level_nodes);
+    IntVector block_ranks(level_nodes), small_vectors(level_nodes);
+    IntVector ldu_batch(level_nodes), ldz_batch(level_nodes);
+
+    // Initialize arrays
+    initVector(node_ranks, 0, main_stream);
+    initVector(op_samples, max_rank, main_stream);
+    initVector(block_ranks, 0, main_stream);
+    initVector(small_vectors, 0, main_stream);
+    initVector(ldu_batch, n, main_stream);
+    initVector(ldz_batch, max_rank, main_stream);
+
     RealVector Z_strided(max_rank * max_rank * level_nodes);
     RealPointerArray Y_ptrs(level_nodes), Z_ptrs(level_nodes);
 
@@ -104,7 +114,9 @@ void hara_weak_admissibility_low_rank_update_template(HMatrixSampler *sampler, T
     // and the only thing that changes in the loop is the required
     // number of samples
     ///////////////////////////////////////////////////////////////////
-    RealVector random_input(n * BS, 0);
+    RealVector random_input(n * BS);
+    initVector(random_input, (H2Opus_Real)0, main_stream);
+
     RealPointerArray input_ptrs(level_nodes);
 
     hara_weak_admissibility_random_input_marshal_batch<H2Opus_Real, hw>(
@@ -160,41 +172,48 @@ void hara_weak_admissibility_low_rank_update_template(HMatrixSampler *sampler, T
         {
             // Project samples
             // Y = Y - Q * (Q' * Y) = Y - Q * Z
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-                main_stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(node_ranks), vec_ptr(op_samples),
-                vec_ptr(output_block_sizes), rank, samples, max_output_block_size, 1, (const H2Opus_Real **)Q_batch,
-                vec_ptr(ldu_batch), (const H2Opus_Real **)Y_batch, vec_ptr(ldu_batch), 0, Z_batch, vec_ptr(ldz_batch),
-                level_nodes));
+            check_kblas_error((
+                H2OpusBatched<H2Opus_Real, hw>::gemm)(main_stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(node_ranks),
+                                                      vec_ptr(op_samples), vec_ptr(output_block_sizes), rank, samples,
+                                                      max_output_block_size, 1, (const H2Opus_Real **)Q_batch,
+                                                      vec_ptr(ldu_batch), (const H2Opus_Real **)Y_batch,
+                                                      vec_ptr(ldu_batch), 0, Z_batch, vec_ptr(ldz_batch), level_nodes));
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
-                main_stream, H2Opus_NoTrans, H2Opus_NoTrans, vec_ptr(output_block_sizes), vec_ptr(op_samples),
-                vec_ptr(node_ranks), max_output_block_size, samples, rank, -1, (const H2Opus_Real **)Q_batch,
-                vec_ptr(ldu_batch), (const H2Opus_Real **)Z_batch, vec_ptr(ldz_batch), 1, Y_batch, vec_ptr(ldu_batch),
-                level_nodes));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(main_stream, H2Opus_NoTrans, H2Opus_NoTrans,
+                                                                     vec_ptr(output_block_sizes), vec_ptr(op_samples),
+                                                                     vec_ptr(node_ranks), max_output_block_size,
+                                                                     samples, rank, -1, (const H2Opus_Real **)Q_batch,
+                                                                     vec_ptr(ldu_batch), (const H2Opus_Real **)Z_batch,
+                                                                     vec_ptr(ldz_batch), 1, Y_batch, vec_ptr(ldu_batch),
+                                                                     level_nodes));
 
             // Panel orthogonalization using cholesky qr
             // Compute G = A'*A in mixed precision
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::mp_syrk)(
-                main_stream, vec_ptr(output_block_sizes), vec_ptr(op_samples), max_output_block_size, samples,
-                (const H2Opus_Real **)Y_batch, vec_ptr(ldu_batch), vec_ptr(G_ptrs), vec_ptr(op_samples), level_nodes));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::mp_syrk)(main_stream, vec_ptr(output_block_sizes),
+                                                                        vec_ptr(op_samples), max_output_block_size,
+                                                                        samples, (const H2Opus_Real **)Y_batch,
+                                                                        vec_ptr(ldu_batch), vec_ptr(G_ptrs),
+                                                                        vec_ptr(op_samples), level_nodes));
 
             // Cholesky on G into Z
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::mp_fused_potrf)(
-                main_stream, vec_ptr(op_samples), BS, vec_ptr(G_ptrs), vec_ptr(op_samples), Z_batch, vec_ptr(ldz_batch),
-                vec_ptr(R_diag), vec_ptr(block_ranks), level_nodes));
+            check_kblas_error(
+                (H2OpusBatched<H2Opus_Real, hw>::mp_fused_potrf)(main_stream, vec_ptr(op_samples), BS, vec_ptr(G_ptrs),
+                                                                 vec_ptr(op_samples), Z_batch, vec_ptr(ldz_batch),
+                                                                 vec_ptr(R_diag), vec_ptr(block_ranks), level_nodes));
 
             // Copy the ranks over to the samples in case the rank was less than the samples
             copyArray(vec_ptr(block_ranks), vec_ptr(op_samples), level_nodes, main_stream, hw);
 
             // TRSM to set Y = Y * Z^-1, the orthogonal factor
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::trsm)(
-                main_stream, vec_ptr(output_block_sizes), vec_ptr(block_ranks), max_output_block_size, BS, Y_batch,
-                vec_ptr(ldu_batch), Z_batch, vec_ptr(ldz_batch), level_nodes));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::trsm_ara)(main_stream, vec_ptr(output_block_sizes),
+                                                                         vec_ptr(block_ranks), max_output_block_size,
+                                                                         BS, Y_batch, vec_ptr(ldu_batch), Z_batch,
+                                                                         vec_ptr(ldz_batch), level_nodes));
         }
 
         // Count the number of vectors that have a small magnitude
         // also updates the rank, max diagonal and advances the Y_batch pointers
-        hara_util_svec_count_batch<H2Opus_Real, hw>(
+        hara_util_svec_count_batch<H2Opus_Real, double, hw>(
             vec_ptr(op_samples), vec_ptr(node_ranks), vec_ptr(small_vectors), vec_ptr(R_diag), r, (double)eps, BS,
             Y_batch, vec_ptr(low_rank_update.U), vec_ptr(ldu_batch), level_nodes, main_stream);
 

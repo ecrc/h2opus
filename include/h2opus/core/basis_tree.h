@@ -1,10 +1,11 @@
 #ifndef __BASIS_TREE_H__
 #define __BASIS_TREE_H__
 
-#include <h2opus/core/basis_tree_level_data.h>
 #include <h2opus/core/h2opus_defs.h>
+#include <h2opus/core/basis_tree_level_data.h>
 #include <h2opus/util/kdtree.h>
 #include <h2opus/util/thrust_wrappers.h>
+#include <h2opus/util/vector_operations.h>
 
 template <int hw> struct TBasisTree
 {
@@ -71,13 +72,13 @@ template <int hw> struct TBasisTree
         assert(this->num_nodes == b.num_nodes);
 
         // Copy matrix data
-        copyThrustArray(this->basis_mem, b.basis_mem);
+        copyVector(this->basis_mem, b.basis_mem);
 
         this->trans_mem.clear();
-        resizeThrustArray(trans_mem, b.trans_mem.size());
+        trans_mem.resize(b.trans_mem.size());
 
         for (size_t i = 0; i < b.trans_mem.size(); i++)
-            copyThrustArray(this->trans_mem[i], b.trans_mem[i]);
+            copyVector(this->trans_mem[i], b.trans_mem[i]);
 
         // Update level data
         this->level_data.copyLevelData(b.level_data);
@@ -97,27 +98,27 @@ template <int hw> struct TBasisTree
         this->level_data = b.level_data;
 
         // Vectors
-        copyThrustArray(this->node_start, b.node_start);
-        copyThrustArray(this->node_len, b.node_len);
-        copyThrustArray(this->index_map, b.index_map);
-        copyThrustArray(this->global_cluster_index, b.global_cluster_index);
+        copyVector(this->node_start, b.node_start);
+        copyVector(this->node_len, b.node_len);
+        copyVector(this->index_map, b.index_map);
+        copyVector(this->global_cluster_index, b.global_cluster_index);
 
-        copyThrustArray(this->head, b.head);
-        copyThrustArray(this->next, b.next);
-        copyThrustArray(this->parent, b.parent);
+        copyVector(this->head, b.head);
+        copyVector(this->next, b.next);
+        copyVector(this->parent, b.parent);
 
         // Allocate the levels
-        resizeThrustArray(trans_mem, depth);
+        trans_mem.resize(depth);
     }
 
     template <int other_hw> TBasisTree &operator=(const TBasisTree<other_hw> &b)
     {
         this->copyStructureData<other_hw>(b);
 
-        copyThrustArray(this->basis_mem, b.basis_mem);
+        copyVector(this->basis_mem, b.basis_mem);
         // Deep copy for this array
         for (int level = 0; level < depth; level++)
-            copyThrustArray(this->trans_mem[level], b.trans_mem[level]);
+            copyVector(this->trans_mem[level], b.trans_mem[level]);
 
         return *this;
     }

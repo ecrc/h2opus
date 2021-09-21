@@ -1,0 +1,24 @@
+# Example configuration file with IBM compilers
+
+# C++ compiler
+# CXX = xlc++_r
+H2OPUS_USE_MPI = 1
+CXX = mpicxx 
+
+# Compiler flags
+CXXFLAGS = -qmaxmem=-1 -Wall -qsmp=omp -O2 -std=c++14 -DH2OPUS_PROFILING_ENABLED
+
+# Linker flags
+LDFLAGS = -qsmp=omp
+
+# Tell H2OPUS to take advantage of ESSL routines for random number generator
+H2OPUS_USE_ESSL = 1
+BLAS_INCDIR = $(ESSL_DIR)/include
+BLAS_LIBS = -Wl,-rpath,$(ESSL_DIR)/lib64 -L$(ESSL_DIR)/lib64 -lessl
+
+# ESSL (as of 6.3.0) does not provide orgqr and lacpy operations
+# We need the implementation of these functions from another LAPACK distribution
+BLAS_LIBS += -Wl,-rpath,$(NETLIB_LAPACK_DIR)/lib64 -L$(NETLIB_LAPACK_DIR)/lib64 -llapack -Wl,-rpath,$(ESSL_DIR)/lib64 -L$(ESSL_DIR)/lib64 -lessl
+
+# for CPU only builds, we need thrust
+THRUST_INCDIR = $(THRUST_DIR)/include

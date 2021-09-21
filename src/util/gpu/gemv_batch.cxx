@@ -4,8 +4,8 @@
 #define GEMV_LOAD(x) __ldg(&(x))
 
 template <class T, class T_ptr, int row_blocks>
-__global__ void gemvt_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch, T beta, T_ptr y_batch, int num_ops,
-                            int ops_per_block)
+__global__ void gemvt_batch(int m, int n, T alpha, T_ptr A_batch, int lda, T_ptr x_batch, T beta, T_ptr y_batch,
+                            int num_ops, int ops_per_block)
 {
     int lane_id = threadIdx.x % WARP_SIZE;
     int block_col = threadIdx.y;
@@ -23,7 +23,7 @@ __global__ void gemvt_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch,
     T *x = getOperationPtr<T>(x_batch, op_id, m);
     T *y = getOperationPtr<T>(y_batch, op_id, n);
 
-    A += m * col_start;
+    A += lda * col_start;
     y += col_start;
 
     T x_data[row_blocks];
@@ -48,13 +48,13 @@ __global__ void gemvt_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch,
 
         if (lane_id == 0)
             y[col] = beta * y[col] + product;
-        A += m;
+        A += lda;
     }
 }
 
 template <class T, class T_ptr>
-__global__ void gemvn_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch, T beta, T_ptr y_batch, int num_ops,
-                            int ops_per_block)
+__global__ void gemvn_batch(int m, int n, T alpha, T_ptr A_batch, int lda, T_ptr x_batch, T beta, T_ptr y_batch,
+                            int num_ops, int ops_per_block)
 {
     extern __shared__ char sdata[];
 
@@ -87,7 +87,7 @@ __global__ void gemvn_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch,
     for (int i = 0; i < n; i++)
     {
         dotp += GEMV_LOAD(*A_ptr) * vec_data[i];
-        A_ptr += m;
+        A_ptr += lda;
     }
 
     // Now flush the results to global memory
@@ -95,8 +95,8 @@ __global__ void gemvn_batch(int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch,
 }
 
 template <class T, class T_ptr>
-void gemv_batch(char transpose, int m, int n, T alpha, T_ptr A_batch, T_ptr x_batch, T beta, T_ptr y_batch, int num_ops,
-                cudaStream_t stream)
+void gemv_batch(char transpose, int m, int n, T alpha, T_ptr A_batch, int lda, T_ptr x_batch, T beta, T_ptr y_batch,
+                int num_ops, cudaStream_t stream)
 {
     if (m <= 0 || n <= 0 || num_ops <= 0)
         return;
@@ -124,68 +124,68 @@ void gemv_batch(char transpose, int m, int n, T alpha, T_ptr A_batch, T_ptr x_ba
         switch (row_blocks)
         {
         case 1:
-            gemvt_batch<T, T_ptr, 1><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 1><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 2:
-            gemvt_batch<T, T_ptr, 2><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 2><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 3:
-            gemvt_batch<T, T_ptr, 3><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 3><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 4:
-            gemvt_batch<T, T_ptr, 4><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 4><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 5:
-            gemvt_batch<T, T_ptr, 5><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 5><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 6:
-            gemvt_batch<T, T_ptr, 6><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 6><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 7:
-            gemvt_batch<T, T_ptr, 7><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 7><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 8:
-            gemvt_batch<T, T_ptr, 8><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 8><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 9:
-            gemvt_batch<T, T_ptr, 9><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                       num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 9><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                       y_batch, num_ops, ops_per_block);
             break;
         case 10:
-            gemvt_batch<T, T_ptr, 10><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 10><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 11:
-            gemvt_batch<T, T_ptr, 11><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 11><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 12:
-            gemvt_batch<T, T_ptr, 12><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 12><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 13:
-            gemvt_batch<T, T_ptr, 13><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 13><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 14:
-            gemvt_batch<T, T_ptr, 14><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 14><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 15:
-            gemvt_batch<T, T_ptr, 15><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 15><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         case 16:
-            gemvt_batch<T, T_ptr, 16><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, x_batch, beta, y_batch,
-                                                                        num_ops, ops_per_block);
+            gemvt_batch<T, T_ptr, 16><<<dimGrid, dimBlock, 0, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
+                                                                        y_batch, num_ops, ops_per_block);
             break;
         default:
             printf("GEMVT batch: Invalid row count %d\n", m);
@@ -203,33 +203,33 @@ void gemv_batch(char transpose, int m, int n, T alpha, T_ptr A_batch, T_ptr x_ba
         dim3 dimBlock(m * ops_per_block);
         dim3 dimGrid(iDivUp(num_ops, ops_per_block));
 
-        gemvn_batch<T, T_ptr><<<dimGrid, dimBlock, smem_per_block, stream>>>(m, n, alpha, A_batch, x_batch, beta,
+        gemvn_batch<T, T_ptr><<<dimGrid, dimBlock, smem_per_block, stream>>>(m, n, alpha, A_batch, lda, x_batch, beta,
                                                                              y_batch, num_ops, ops_per_block);
 
         gpuErrchk(cudaGetLastError());
     }
 }
 
-void gemv_batch(char transpose, int m, int n, float alpha, float **A_batch, float **x_batch, float beta,
+void gemv_batch(char transpose, int m, int n, float alpha, float **A_batch, int lda, float **x_batch, float beta,
                 float **y_batch, int num_ops, cudaStream_t stream)
 {
-    gemv_batch<float, float **>(transpose, m, n, alpha, A_batch, x_batch, beta, y_batch, num_ops, stream);
+    gemv_batch<float, float **>(transpose, m, n, alpha, A_batch, lda, x_batch, beta, y_batch, num_ops, stream);
 }
 
-void gemv_batch(char transpose, int m, int n, double alpha, double **A_batch, double **x_batch, double beta,
+void gemv_batch(char transpose, int m, int n, double alpha, double **A_batch, int lda, double **x_batch, double beta,
                 double **y_batch, int num_ops, cudaStream_t stream)
 {
-    gemv_batch<double, double **>(transpose, m, n, alpha, A_batch, x_batch, beta, y_batch, num_ops, stream);
+    gemv_batch<double, double **>(transpose, m, n, alpha, A_batch, lda, x_batch, beta, y_batch, num_ops, stream);
 }
 
-void gemv_batch(char transpose, int m, int n, float alpha, float *A_batch, float *x_batch, float beta, float *y_batch,
-                int num_ops, cudaStream_t stream)
+void gemv_batch(char transpose, int m, int n, float alpha, float *A_batch, int lda, float *x_batch, float beta,
+                float *y_batch, int num_ops, cudaStream_t stream)
 {
-    gemv_batch<float, float *>(transpose, m, n, alpha, A_batch, x_batch, beta, y_batch, num_ops, stream);
+    gemv_batch<float, float *>(transpose, m, n, alpha, A_batch, lda, x_batch, beta, y_batch, num_ops, stream);
 }
 
-void gemv_batch(char transpose, int m, int n, double alpha, double *A_batch, double *x_batch, double beta,
+void gemv_batch(char transpose, int m, int n, double alpha, double *A_batch, int lda, double *x_batch, double beta,
                 double *y_batch, int num_ops, cudaStream_t stream)
 {
-    gemv_batch<double, double *>(transpose, m, n, alpha, A_batch, x_batch, beta, y_batch, num_ops, stream);
+    gemv_batch<double, double *>(transpose, m, n, alpha, A_batch, lda, x_batch, beta, y_batch, num_ops, stream);
 }

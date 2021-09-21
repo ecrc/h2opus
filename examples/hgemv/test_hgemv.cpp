@@ -21,14 +21,16 @@ int main(int argc, char **argv)
         "k", "cheb_grid_pts", "Number of grid points in each dimension for Chebyshev interpolation (rank = k^d)", 8);
     H2Opus_Real eta = arg_parser.option<H2Opus_Real>("e", "eta", "Admissibility parameter eta", DEFAULT_ETA);
     int num_vectors = arg_parser.option<int>("nv", "num_vectors", "Number of vectors the matrix multiplies", 1);
+    int nruns = arg_parser.option<int>("n", "nruns", "Number of runs to perform", 10);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool check_approx_err = arg_parser.flag("c", "check_approx_err", "Check the approximation error", false);
+    bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
     if (!arg_parser.valid() || print_help)
     {
         arg_parser.printUsage();
-        exit(0);
+        return 0;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -89,16 +91,22 @@ int main(int argc, char **argv)
     HLibProfile::clear();
 
     // Average over multiple runs
-    const int runs = 10;
     H2Opus_Real alpha = 1, beta = 1;
 
     // CPU execution
-    for (int i = 0; i < runs; i++)
+    for (int i = 0; i < nruns; i++)
     {
         fillArray(vec_ptr(y), n * num_vectors, 0, h2opus_handle->getMainStream(), H2OPUS_HWTYPE_CPU);
         hgemv(H2Opus_NoTrans, alpha, hmatrix, vec_ptr(x), n, beta, vec_ptr(y), n, num_vectors, h2opus_handle);
+        if (print_results)
+        {
+            printf("CPU x\n");
+            printThrustVector(x);
+            printf("CPU y\n");
+            printThrustVector(y);
+        }
     }
-    HLibProfile::getHgemmPerf(total_gops, total_time, total_perf, total_dev);
+    HLibProfile::getHgemvPerf(total_gops, total_time, total_perf, total_dev);
     printf("CPU Total execution time: %f s at %f (Gflop/s) (%.3f dev)\n", total_time, total_perf, total_dev);
     HLibProfile::clear();
 
@@ -122,7 +130,7 @@ int main(int argc, char **argv)
 #ifdef H2OPUS_USE_GPU
     // Test hgemv on the GPU and compare with the CPU results
     thrust::device_vector<H2Opus_Real> gpu_x = x, gpu_y;
-    resizeThrustArray(gpu_y, n * num_vectors);
+    gpu_y.resize(n * num_vectors);
 
     // Copy the hmatrix over to the GPU
     HMatrix_GPU gpu_h = hmatrix;
@@ -132,12 +140,16 @@ int main(int argc, char **argv)
     h2opus_handle->setWorkspaceState(ws_needed_gpu);
 
     // GPU execution
-    for (int i = 0; i < runs; i++)
+    for (int i = 0; i < nruns; i++)
     {
         fillArray(vec_ptr(gpu_y), n * num_vectors, 0, h2opus_handle->getMainStream(), H2OPUS_HWTYPE_GPU);
         hgemv(H2Opus_NoTrans, alpha, gpu_h, vec_ptr(gpu_x), n, beta, vec_ptr(gpu_y), n, num_vectors, h2opus_handle);
+        printf("GPU x\n");
+        printThrustVector(gpu_x);
+        printf("GPU y\n");
+        printThrustVector(gpu_y);
     }
-    HLibProfile::getHgemmPerf(total_gops, total_time, total_perf, total_dev);
+    HLibProfile::getHgemvPerf(total_gops, total_time, total_perf, total_dev);
     printf("GPU Total execution time: %f s at %f (Gflop/s) (%.3f dev)\n", total_time, total_perf, total_dev);
     HLibProfile::clear();
 

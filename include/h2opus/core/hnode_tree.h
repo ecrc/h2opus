@@ -1,17 +1,13 @@
 #ifndef __HNODE_TREE_H__
 #define __HNODE_TREE_H__
 
-#include <h2opus/core/basis_tree.h>
 #include <h2opus/core/h2opus_defs.h>
+#include <h2opus/core/basis_tree.h>
 #include <h2opus/core/hnode_tree_data.h>
 
 #include <h2opus/util/geometric_admissibility.h>
 #include <h2opus/util/kdtree.h>
 #include <h2opus/util/thrust_wrappers.h>
-
-#define HMATRIX_RANK_MATRIX 0
-#define HMATRIX_DENSE_MATRIX 1
-#define HMATRIX_INNER_NODE 2
 
 template <int hw> struct THNodeTree
 {
@@ -79,7 +75,7 @@ template <int hw> struct THNodeTree
     {
         // The dense leaf data is never reallocated since their size won't change
         // Clearing them just means setting them to zero
-        fillArray(vec_ptr(dense_leaf_mem), dense_leaf_mem.size(), 0, 0, hw);
+        initVector(dense_leaf_mem, (H2Opus_Real)0, NULL);
 
         for (size_t i = 0; i < rank_leaf_mem.size(); i++)
             rank_leaf_mem[i].clear();
@@ -104,24 +100,24 @@ template <int hw> struct THNodeTree
         this->bsn_col_data = h.bsn_col_data;
 
         // Vectors
-        copyThrustArray(this->node_u_index, h.node_u_index);
-        copyThrustArray(this->node_v_index, h.node_v_index);
-        copyThrustArray(this->node_morton_level_index, h.node_morton_level_index);
-        copyThrustArray(this->head, h.head);
-        copyThrustArray(this->next, h.next);
-        copyThrustArray(this->parent, h.parent);
-        copyThrustArray(this->dense_leaf_tree_index, h.dense_leaf_tree_index);
-        copyThrustArray(this->rank_leaf_tree_index, h.rank_leaf_tree_index);
-        copyThrustArray(this->inner_node_tree_index, h.inner_node_tree_index);
-        copyThrustArray(this->node_type, h.node_type);
-        copyThrustArray(this->node_to_leaf, h.node_to_leaf);
+        copyVector(this->node_u_index, h.node_u_index);
+        copyVector(this->node_v_index, h.node_v_index);
+        copyVector(this->node_morton_level_index, h.node_morton_level_index);
+        copyVector(this->head, h.head);
+        copyVector(this->next, h.next);
+        copyVector(this->parent, h.parent);
+        copyVector(this->dense_leaf_tree_index, h.dense_leaf_tree_index);
+        copyVector(this->rank_leaf_tree_index, h.rank_leaf_tree_index);
+        copyVector(this->inner_node_tree_index, h.inner_node_tree_index);
+        copyVector(this->node_type, h.node_type);
+        copyVector(this->node_to_leaf, h.node_to_leaf);
 
-        copyThrustArray(this->dense_leaf_mem, h.dense_leaf_mem);
+        copyVector(this->dense_leaf_mem, h.dense_leaf_mem);
 
         // Have to deep copy this one
-        resizeThrustArray(rank_leaf_mem, h.rank_leaf_mem.size());
+        rank_leaf_mem.resize(h.rank_leaf_mem.size());
         for (size_t i = 0; i < h.rank_leaf_mem.size(); i++)
-            copyThrustArray(this->rank_leaf_mem[i], h.rank_leaf_mem[i]);
+            copyVector(this->rank_leaf_mem[i], h.rank_leaf_mem[i]);
 
         return *this;
     }
@@ -250,7 +246,7 @@ template <int hw> struct THNodeTree
     void determineStructure(TH2OpusKDTree<H2Opus_Real, hw> &kdtree,
                             TH2OpusAdmissibility<H2Opus_Real, hw> &admissibility, TBasisTree<hw> &u_basis_tree,
                             int u_start_level, TBasisTree<hw> &v_basis_tree, int v_start_level, int max_depth,
-                            std::vector<int> v_list);
+                            std::vector<int> &v_list);
 
     // Variant that is used for symmetric matrices
     void determineStructure(TH2OpusKDTree<H2Opus_Real, hw> &kdtree,

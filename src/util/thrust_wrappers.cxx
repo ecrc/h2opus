@@ -12,44 +12,124 @@
 #include <thrust/for_each.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/zip_iterator.h>
-#include <thrust/random.h>
-#include <thrust/random/linear_congruential_engine.h>
-#include <thrust/random/normal_distribution.h>
+#include <thrust/iterator/discard_iterator.h>
 #include <thrust/sequence.h>
 #include <thrust/transform_scan.h>
+#include <thrust/sequence.h>
+#include <thrust/sort.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Some array utility functions
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void exclusiveScan(int *array, size_t num_entries, int *result, int init, h2opusComputeStream_t stream, int hw)
+int exclusiveScan(const int *array, size_t num_entries, int *result, int init, h2opusComputeStream_t stream, int hw)
 {
 #ifdef H2OPUS_USE_GPU
     if (hw == H2OPUS_HWTYPE_GPU)
-        thrust::exclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), array, array + num_entries, result, init);
+    {
+        const thrust::device_ptr<const int> start(array);
+        thrust::device_ptr<int> res(result);
+        thrust::device_ptr<int> end_ptr = thrust::exclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), start,
+                                                                 start + num_entries, res, init);
+        return *(end_ptr - 1);
+    }
     else
 #endif
-        thrust::exclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, result, init);
+    {
+        int *end_ptr = thrust::exclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries,
+                                              result, init);
+        return *(end_ptr - 1);
+    }
 }
 
-void inclusiveScan(int *array, size_t num_entries, int *result, h2opusComputeStream_t stream, int hw)
+int inclusiveScan(const int *array, size_t num_entries, int *result, h2opusComputeStream_t stream, int hw)
 {
 #ifdef H2OPUS_USE_GPU
     if (hw == H2OPUS_HWTYPE_GPU)
-        thrust::inclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), array, array + num_entries, result);
+    {
+        const thrust::device_ptr<const int> start(array);
+        thrust::device_ptr<int> res(result);
+
+        thrust::device_ptr<int> end_ptr =
+            thrust::inclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), start, start + num_entries, res);
+        return *(end_ptr - 1);
+    }
     else
 #endif
-        thrust::inclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, result);
+    {
+        int *end_ptr =
+            thrust::inclusive_scan(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, result);
+        return *(end_ptr - 1);
+    }
+}
+
+void sortByKey(int *keys, int *values, size_t elements, bool ascending, h2opusComputeStream_t stream, int hw)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+    {
+        thrust::sort_by_key(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), keys, keys + elements, values,
+                            (ascending ? thrust::greater<int>() : thrust::greater<int>()));
+    }
+    else
+#endif
+    {
+        thrust::sort_by_key(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), keys, keys + elements, values,
+                            (ascending ? thrust::greater<int>() : thrust::greater<int>()));
+    }
+}
+
+struct which_segment : thrust::unary_function<int, int>
+{
+    int seg_size;
+
+    __host__ __device__ which_segment(int seg_size)
+    {
+        this->seg_size = seg_size;
+    }
+
+    inline __host__ __device__ int operator()(int idx) const
+    {
+        return idx / seg_size;
+    }
+};
+
+int getSegmentedMaxElements(int *a, size_t elements, size_t seg_size, int *seg_maxes, h2opusComputeStream_t stream,
+                            int hw)
+{
+    thrust::counting_iterator<int> c_first(0);
+    thrust::transform_iterator<which_segment, thrust::counting_iterator<int>> t_first(c_first, which_segment(seg_size));
+
+    thrust::equal_to<int> binary_pred;
+    thrust::maximum<int> binary_op;
+
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+    {
+        auto end = thrust::reduce_by_key(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), t_first, t_first + elements, a,
+                                         thrust::make_discard_iterator(), seg_maxes, binary_pred, binary_op);
+
+        return end.second - seg_maxes;
+    }
+    else
+#endif
+    {
+        auto end = thrust::reduce_by_key(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), t_first, t_first + elements, a,
+                                         thrust::make_discard_iterator(), seg_maxes, binary_pred, binary_op);
+
+        return end.second - seg_maxes;
+    }
 }
 
 template <typename T> struct absolute_value : public thrust::unary_function<T, T>
 {
-    __host__ __device__ T operator()(const T &x) const
+    inline __host__ __device__ T operator()(const T &x) const
     {
         return (x < 0 ? -x : x);
     }
 };
 
-template <class T> inline int getMinElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw)
+// assumes entries of a are all positive
+template <class T> inline T getMinElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw)
 {
 #ifdef H2OPUS_USE_GPU
     if (hw == H2OPUS_HWTYPE_GPU)
@@ -61,6 +141,7 @@ template <class T> inline int getMinElementT(T *a, size_t elements, h2opusComput
                               thrust::minimum<T>());
 }
 
+// assumes entries of a are all positive
 template <class T> inline T getMaxElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw)
 {
 #ifdef H2OPUS_USE_GPU
@@ -69,8 +150,10 @@ template <class T> inline T getMaxElementT(T *a, size_t elements, h2opusComputeS
                               thrust::maximum<T>());
     else
 #endif
+    {
         return thrust::reduce(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), a, a + elements, (T)0,
                               thrust::maximum<T>());
+    }
 }
 
 template <class T> inline T getMaxAbsElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw)
@@ -117,8 +200,8 @@ double getMaxAbsElement(double *a, size_t elements, h2opusComputeStream_t stream
 
 template <class T> struct argmaxabs_reduction_functor
 {
-    __host__ __device__ thrust::tuple<T, size_t> operator()(const thrust::tuple<T, size_t> &lhs,
-                                                            const thrust::tuple<T, size_t> &rhs)
+    inline __host__ __device__ thrust::tuple<T, size_t> operator()(const thrust::tuple<T, size_t> &lhs,
+                                                                   const thrust::tuple<T, size_t> &rhs)
     {
         if (fabs(thrust::get<0>(lhs)) < fabs(thrust::get<0>(rhs)))
             return rhs;
@@ -132,7 +215,7 @@ template <class T> struct argmaxabs_reduction_functor
 };
 
 template <class T>
-void argMaxAbsElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw, T &max, size_t &j)
+inline void argMaxAbsElementT(T *a, size_t elements, h2opusComputeStream_t stream, int hw, T &max, size_t &j)
 {
     if (elements == 0)
         return;
@@ -224,7 +307,13 @@ template <class T> inline void fillArrayT(T *array, size_t num_entries, T val, h
         thrust::fill(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), array, array + num_entries, val);
     else
 #endif
-        thrust::fill(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, val);
+#ifdef H2OPUS_USE_NEC
+#pragma omp parallel for firstprivate(val)
+        for (size_t e = 0; e < num_entries; e++)
+            array[e] = val;
+#else
+    thrust::fill(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, val);
+#endif
 }
 
 void fillArray(float *array, size_t num_entries, float val, h2opusComputeStream_t stream, int hw)
@@ -242,6 +331,32 @@ void fillArray(int *array, size_t num_entries, int val, h2opusComputeStream_t st
     fillArrayT<int>(array, num_entries, val, stream, hw);
 }
 
+void fillArray(float **array, size_t num_entries, float *val, h2opusComputeStream_t stream, int hw)
+{
+    fillArrayT<float *>(array, num_entries, val, stream, hw);
+}
+
+void fillArray(double **array, size_t num_entries, double *val, h2opusComputeStream_t stream, int hw)
+{
+    fillArrayT<double *>(array, num_entries, val, stream, hw);
+}
+
+void generateSequence(int *array, size_t num_entries, int start_val, h2opusComputeStream_t stream, int hw)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        thrust::sequence(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), array, array + num_entries, start_val);
+    else
+#endif
+#ifdef H2OPUS_USE_NEC
+#pragma omp parallel for firstprivate(start_val)
+        for (size_t e = 0; e < num_entries; e++)
+            array[e] = start_val + e;
+#else
+    thrust::sequence(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), array, array + num_entries, start_val);
+#endif
+}
+
 template <class T> inline void copyArrayT(T *input, T *output, size_t num_entries, h2opusComputeStream_t stream, int hw)
 {
 #ifdef H2OPUS_USE_GPU
@@ -249,7 +364,13 @@ template <class T> inline void copyArrayT(T *input, T *output, size_t num_entrie
         thrust::copy(ThrustRuntime<H2OPUS_HWTYPE_GPU>::get(stream), input, input + num_entries, output);
     else
 #endif
-        thrust::copy(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), input, input + num_entries, output);
+#ifdef H2OPUS_USE_NEC
+#pragma omp parallel for
+        for (size_t e = 0; e < num_entries; e++)
+            output[e] = input[e];
+#else
+    thrust::copy(ThrustRuntime<H2OPUS_HWTYPE_CPU>::get(stream), input, input + num_entries, output);
+#endif
 }
 
 void copyArray(float *input, float *output, size_t num_entries, h2opusComputeStream_t stream, int hw)
@@ -285,7 +406,7 @@ template <class T> struct SignVector_Functor
         this->v = v;
         this->e = e;
     }
-    __host__ __device__ void operator()(size_t i)
+    inline __host__ __device__ void operator()(size_t i)
     {
         e[i] = (v[i] >= 0 ? 1 : -1);
     }
@@ -328,7 +449,7 @@ template <class T> struct StandardBasis_Functor
         this->v = v;
         this->j = j;
     }
-    __host__ __device__ void operator()(size_t i)
+    inline __host__ __device__ void operator()(size_t i)
     {
         v[i] = (i == j ? 1 : 0);
     }
@@ -371,7 +492,7 @@ struct RemElements_Functor
         this->v = v;
     }
 
-    __host__ __device__ void operator()(size_t i)
+    inline __host__ __device__ void operator()(size_t i)
     {
         int val = v - a[i];
         if (val < 0)
@@ -398,20 +519,6 @@ void getRemainingElements(int *a, int v, size_t elements, h2opusComputeStream_t 
     }
 }
 
-void generateRandomColumn(double *A, size_t n, thrust::minstd_rand &state)
-{
-    thrust::random::normal_distribution<double> dist;
-    for (size_t i = 0; i < n; i++)
-        A[i] = dist(state);
-}
-
-void generateRandomColumn(float *A, size_t n, thrust::minstd_rand &state)
-{
-    thrust::random::normal_distribution<double> dist;
-    for (size_t i = 0; i < n; i++)
-        A[i] = (float)dist(state);
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Permuting vectors using an index map
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -429,7 +536,7 @@ template <class T, int reverse> struct vector_permutor : public thrust::unary_fu
         this->num_vectors = num_vectors;
     }
 
-    __host__ __device__ void operator()(int original_index)
+    inline __host__ __device__ void operator()(int original_index)
     {
         int permuted_index = index_map[original_index];
         int input_index = (reverse ? original_index : permuted_index);
@@ -446,9 +553,23 @@ template <class T, int reverse> struct vector_permutor : public thrust::unary_fu
 };
 
 template <class T, int hw>
-void permute_vectors_template(T *original, T *permuted, int n, int num_vectors, int *index_map, int reverse,
-                              h2opusComputeStream_t stream)
+inline void permute_vectors_template(T *original, T *permuted, int n, int num_vectors, int *index_map, int reverse,
+                                     h2opusComputeStream_t stream)
 {
+#ifdef H2OPUS_USE_NEC
+    if (reverse == 0)
+    {
+#pragma omp parallel for
+        for (int i = 0; i < n; i++)
+            permuted[i] = original[index_map[i]];
+    }
+    else
+    {
+#pragma omp parallel for
+        for (int i = 0; i < n; i++)
+            permuted[index_map[i]] = original[i];
+    }
+#else
     if (reverse == 0)
     {
         thrust::for_each(ThrustRuntime<hw>::get(stream), thrust::counting_iterator<int>(0),
@@ -461,6 +582,7 @@ void permute_vectors_template(T *original, T *permuted, int n, int num_vectors, 
                          thrust::counting_iterator<int>(n),
                          vector_permutor<T, 1>(index_map, original, permuted, n, num_vectors));
     }
+#endif
 }
 
 void permute_vectors(float *original, float *permuted, int n, int num_vectors, int *index_map, int reverse, int hw,
@@ -490,6 +612,89 @@ void permute_vectors(double *original, double *permuted, int n, int num_vectors,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Swap two vectors
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template <class T> struct vector_swapper : public thrust::unary_function<int, int>
+{
+    int incx, incy;
+    T *x, *y;
+
+    vector_swapper(T *x, T *y, int incx, int incy)
+    {
+        this->x = x;
+        this->y = y;
+        this->incx = incx;
+        this->incy = incy;
+    }
+
+    inline __host__ __device__ void operator()(int i)
+    {
+        int ix = i * incx, iy = i * incy;
+
+        T tmp = x[ix];
+        x[ix] = y[iy];
+        y[iy] = tmp;
+    }
+};
+
+template <class T, int hw>
+inline void swap_vectors_template(int n, T *x, int incx, T *y, int incy, h2opusComputeStream_t stream)
+{
+    thrust::for_each(ThrustRuntime<hw>::get(stream), thrust::counting_iterator<int>(0),
+                     thrust::counting_iterator<int>(n), vector_swapper<T>(x, y, incx, incy));
+}
+
+void swap_vectors(int n, float *x, int incx, float *y, int incy, int hw, h2opusComputeStream_t stream)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        swap_vectors_template<float, H2OPUS_HWTYPE_GPU>(n, x, incx, y, incy, stream);
+    else
+#endif
+        swap_vectors_template<float, H2OPUS_HWTYPE_CPU>(n, x, incx, y, incy, stream);
+}
+
+void swap_vectors(int n, double *x, int incx, double *y, int incy, int hw, h2opusComputeStream_t stream)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        swap_vectors_template<double, H2OPUS_HWTYPE_GPU>(n, x, incx, y, incy, stream);
+    else
+#endif
+        swap_vectors_template<double, H2OPUS_HWTYPE_CPU>(n, x, incx, y, incy, stream);
+}
+
+void swap_vectors(int n, float **x, int incx, float **y, int incy, int hw, h2opusComputeStream_t stream)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        swap_vectors_template<float *, H2OPUS_HWTYPE_GPU>(n, x, incx, y, incy, stream);
+    else
+#endif
+        swap_vectors_template<float *, H2OPUS_HWTYPE_CPU>(n, x, incx, y, incy, stream);
+}
+
+void swap_vectors(int n, double **x, int incx, double **y, int incy, int hw, h2opusComputeStream_t stream)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        swap_vectors_template<double *, H2OPUS_HWTYPE_GPU>(n, x, incx, y, incy, stream);
+    else
+#endif
+        swap_vectors_template<double *, H2OPUS_HWTYPE_CPU>(n, x, incx, y, incy, stream);
+}
+
+void swap_vectors(int n, int *x, int incx, int *y, int incy, int hw, h2opusComputeStream_t stream)
+{
+#ifdef H2OPUS_USE_GPU
+    if (hw == H2OPUS_HWTYPE_GPU)
+        swap_vectors_template<int, H2OPUS_HWTYPE_GPU>(n, x, incx, y, incy, stream);
+    else
+#endif
+        swap_vectors_template<int, H2OPUS_HWTYPE_CPU>(n, x, incx, y, incy, stream);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Generating array of pointers from either a strided array or another array of pointers
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class T> inline __host__ __device__ T *getOperationPtr(T *array, size_t op_id, int stride)
@@ -515,15 +720,15 @@ template <class T, class T_ptr> struct UnaryAoAAssign
         this->offset = offset;
     }
 
-    __host__ __device__ void operator()(const size_t &index) const
+    inline __host__ __device__ void operator()(const size_t &index) const
     {
         output[index] = getOperationPtr<T>(original_array, index, stride) + offset;
     }
 };
 
 template <class T, class T_ptr>
-void generateArrayOfPointersT(T_ptr original_array, T **array_of_arrays, int stride, int offset, size_t num_arrays,
-                              h2opusComputeStream_t stream, int hw)
+inline void generateArrayOfPointersT(T_ptr original_array, T **array_of_arrays, int stride, int offset,
+                                     size_t num_arrays, h2opusComputeStream_t stream, int hw)
 {
     UnaryAoAAssign<T, T_ptr> aoa_functor(array_of_arrays, original_array, stride, offset);
 #ifdef H2OPUS_USE_GPU
@@ -611,127 +816,4 @@ void generateArrayOfPointers(float *original_array, float **array_of_arrays, int
                              h2opusComputeStream_t stream, int hw)
 {
     generateArrayOfPointersT<float, float *>(original_array, array_of_arrays, stride, 0, num_arrays, stream, hw);
-}
-
-// Some stupid thrust wrappers for resizing arrays so that we can compile without nvcc
-#ifdef H2OPUS_USE_GPU
-void resizeThrustArray(thrust::device_vector<float> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::device_vector<double> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::device_vector<int> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::device_vector<float *> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::device_vector<double *> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-// Vector of thrust vectors
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<float>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<double>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<int>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-
-void copyThrustArray(thrust::device_vector<double> &dest, const thrust::device_vector<double> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::device_vector<float> &dest, const thrust::device_vector<float> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::device_vector<int> &dest, const thrust::device_vector<int> &src)
-{
-    dest = src;
-}
-
-void copyThrustArray(thrust::host_vector<double> &dest, const thrust::device_vector<double> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::host_vector<float> &dest, const thrust::device_vector<float> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::host_vector<int> &dest, const thrust::device_vector<int> &src)
-{
-    dest = src;
-}
-
-void copyThrustArray(thrust::device_vector<double> &dest, const thrust::host_vector<double> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::device_vector<float> &dest, const thrust::host_vector<float> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::device_vector<int> &dest, const thrust::host_vector<int> &src)
-{
-    dest = src;
-}
-#endif
-
-void resizeThrustArray(thrust::host_vector<float> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::host_vector<double> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::host_vector<int> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::host_vector<float *> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(thrust::host_vector<double *> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<float>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<double>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<int>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-
-void copyThrustArray(thrust::host_vector<double> &dest, const thrust::host_vector<double> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::host_vector<float> &dest, const thrust::host_vector<float> &src)
-{
-    dest = src;
-}
-void copyThrustArray(thrust::host_vector<int> &dest, const thrust::host_vector<int> &src)
-{
-    dest = src;
 }

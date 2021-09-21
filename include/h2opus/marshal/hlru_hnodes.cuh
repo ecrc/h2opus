@@ -193,7 +193,7 @@ template <class T> struct HLRU_DenseBlock_Update_Functor
     __host__ __device__ void operator()(const unsigned int &update_index) const
     {
         int hnode_index = hnode_indexes[update_index];
-        assert(hnode_type[hnode_index] == HMATRIX_DENSE_MATRIX);
+        assert(hnode_type[hnode_index] == H2OPUS_HMATRIX_DENSE_MATRIX);
 
         int hnode_dense_index = hnode_to_leaf[hnode_index];
         int u_index = node_u_index[hnode_index];

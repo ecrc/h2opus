@@ -1,8 +1,18 @@
 #ifndef __PERF_COUNTER_H__
 #define __PERF_COUNTER_H__
 
+#include <thread>
+#include <mutex>
 #include <cmath>
 #include <vector>
+#include <cstdio>
+
+// promote to floating point
+#define H2OPUS_GEMM_OP_COUNT(m, n, k) (2. * (m) * (n) * (k))
+#define H2OPUS_SYRK_OP_COUNT(k, n) (1. * (k) * (k) * (n))
+#define H2OPUS_TRSM_OP_COUNT(side, m, n) (((side) == H2Opus_Left) ? (1. * (n) * (m) * (m)) : (1. * (m) * (n) * (n)))
+#define H2OPUS_POTRF_OP_COUNT(m) (1. * (m) * (m) * (m) / 3.0)
+#define H2OPUS_QR_OP_COUNT(m, n) (3 * m > n ? 2. * m * n * n - 2.0 / 3.0 * n * n * n : 2. * m * n * n)
 
 class PerformanceCounter
 {
@@ -12,6 +22,8 @@ class PerformanceCounter
         SVD,
         QR,
         GEMM,
+        TRSM,
+        POTRF,
         TotalOps
     };
 
@@ -31,7 +43,7 @@ class PerformanceCounter
   public:
     static PerformanceCounter &get()
     {
-        static PerformanceCounter instance;
+        static thread_local PerformanceCounter instance;
         return instance;
     }
 
@@ -49,13 +61,27 @@ class PerformanceCounter
     {
         return get().gops[type];
     }
+
+    static double getOpCount()
+    {
+        double c = 0;
+        for (int i = 0; i < TotalOps; i++)
+            c += get().gops[(OperationTypes)i];
+        return c;
+    }
+
     static void setOpCount(OperationTypes type, double val)
     {
-        get().gops[type] = val;
+        get().gops[type] = val > 0.0 ? val : 0.0;
     }
-    static void addOpCount(OperationTypes type, double val)
+
+#define addOpCount(a, b) addOpCount_(a, b, __FILE__, __func__, __LINE__)
+
+    static void addOpCount_(OperationTypes type, double val, const char *s, const char *f, int l)
     {
-        get().gops[type] += val;
+        if (val < 0.0)
+            printf("%s:%d (%s) %g\n", s, l, f, val);
+        get().gops[type] += val > 0.0 ? val : 0.0;
     }
 
     // Time
@@ -63,10 +89,12 @@ class PerformanceCounter
     {
         return get().op_time[type];
     }
+
     static void setOpTime(OperationTypes type, double time)
     {
         get().op_time[type] = time;
     }
+
     static void addOpTime(OperationTypes type, double time)
     {
         get().op_time[type] += time;
@@ -85,18 +113,9 @@ class HLibProfile
         HGEMV_TOTAL
     };
 
-    enum HgemmProfile
-    {
-        HGEMM_UPSWEEP = HGEMV_TOTAL,
-        HGEMM_MULT,
-        HGEMM_DOWNSWEEP,
-        HGEMM_DENSE,
-        HGEMM_TOTAL
-    };
-
     enum HorthogProfile
     {
-        HORTHOG_BASIS_LEAVES = HGEMM_TOTAL,
+        HORTHOG_BASIS_LEAVES = HGEMV_TOTAL,
         HORTHOG_UPSWEEP,
         HORTHOG_STITCH,
         HORTHOG_PROJECTION,
@@ -123,8 +142,24 @@ class HLibProfile
         HLibProfileCount = H2OPUS_TOTAL
     };
 
+    template <class HLibProfilePhase> static void cumRunT(HLibProfilePhase phase, double perf_metric, double perf_time)
+    {
+        const std::lock_guard<std::mutex> lock(get().operation_mutex[phase]);
+        if (!get().operation_perf[phase].empty())
+        {
+            get().operation_perf[phase].back() += perf_metric;
+            get().operation_time[phase].back() += perf_time;
+        }
+        else
+        {
+            get().operation_perf[phase].push_back(perf_metric);
+            get().operation_time[phase].push_back(perf_time);
+        }
+    }
+
     template <class HLibProfilePhase> static void addRunT(HLibProfilePhase phase, double perf_metric, double perf_time)
     {
+        const std::lock_guard<std::mutex> lock(get().operation_mutex[phase]);
         get().operation_perf[phase].push_back(perf_metric);
         get().operation_time[phase].push_back(perf_time);
     }
@@ -199,8 +234,8 @@ class HLibProfile
 
         int total_runs = 0;
         for (int phase = phase_start; phase <= phase_end; phase++)
-            if ((size_t)total_runs < get().operation_perf[phase_start].size())
-                total_runs = get().operation_perf[phase_start].size();
+            if ((size_t)total_runs < get().operation_perf[phase].size())
+                total_runs = get().operation_perf[phase].size();
 
         if (total_runs == 0)
             return;
@@ -216,24 +251,27 @@ class HLibProfile
             avg_metric += total_metric;
             avg_time += total_time;
             avg_perf += total_metric / total_time;
-            // printf("Run %d performance was %f\n", run, total_metric / total_time);
         }
-        avg_metric /= (total_runs - run_start);
-        avg_time /= (total_runs - run_start);
-        avg_perf /= (total_runs - run_start);
-
         for (int run = run_start; run < total_runs; run++)
         {
             double total_metric = getRunTotalMetric(run, phase_start, phase_end);
             double total_time = getRunTotalTime(run, phase_start, phase_end);
             perf_std_dev += (avg_perf - total_metric / total_time) * (avg_perf - total_metric / total_time);
         }
-        perf_std_dev = sqrt(perf_std_dev / (total_runs - run_start));
+        if (total_runs - run_start)
+        {
+            const int n = total_runs - run_start;
+            avg_metric /= n;
+            avg_time /= n;
+            avg_perf /= n;
+            perf_std_dev = sqrt(perf_std_dev / n);
+        }
     }
 
   private:
     std::vector<double> operation_time[HLibProfileCount];
     std::vector<double> operation_perf[HLibProfileCount];
+    std::mutex operation_mutex[HLibProfileCount];
 
     HLibProfile()
     {
@@ -265,10 +303,6 @@ class HLibProfile
     {
         addRunT(phase, gbytes, perf_time);
     }
-    static void addRun(HgemmProfile phase, double gops, double perf_time)
-    {
-        addRunT(phase, gops, perf_time);
-    }
     static void addRun(HorthogProfile phase, double gops, double perf_time)
     {
         addRunT(phase, gops, perf_time);
@@ -282,15 +316,27 @@ class HLibProfile
         addRunT(phase, gops, perf_time);
     }
 
+    static void cumRun(HgemvProfile phase, double gbytes, double perf_time)
+    {
+        cumRunT(phase, gbytes, perf_time);
+    }
+    static void cumRun(HorthogProfile phase, double gops, double perf_time)
+    {
+        cumRunT(phase, gops, perf_time);
+    }
+    static void cumRun(HcompressProfile phase, double gops, double perf_time)
+    {
+        cumRunT(phase, gops, perf_time);
+    }
+    static void cumRun(H2OpusProfile phase, double gops, double perf_time)
+    {
+        cumRunT(phase, gops, perf_time);
+    }
+
     static void getPhasePerformance(HgemvProfile phase, double &avg_gbs, double &avg_time, double &avg_perf,
                                     double &perf_std_dev)
     {
         getPhasePerformanceT(phase, avg_gbs, avg_time, avg_perf, perf_std_dev);
-    }
-    static void getPhasePerformance(HgemmProfile phase, double &avg_gops, double &avg_time, double &avg_perf,
-                                    double &perf_std_dev)
-    {
-        getPhasePerformanceT(phase, avg_gops, avg_time, avg_perf, perf_std_dev);
     }
     static void getPhasePerformance(HorthogProfile phase, double &avg_gops, double &avg_time, double &avg_perf,
                                     double &perf_std_dev)
@@ -311,10 +357,6 @@ class HLibProfile
     static void getHgemvPerf(double &avg_gbs, double &avg_time, double &avg_perf, double &perf_std_dev)
     {
         getOperationPerformance(HGEMV_UPSWEEP, HGEMV_DENSE, avg_gbs, avg_time, avg_perf, perf_std_dev);
-    }
-    static void getHgemmPerf(double &avg_gops, double &avg_time, double &avg_perf, double &perf_std_dev)
-    {
-        getOperationPerformance(HGEMM_UPSWEEP, HGEMM_DENSE, avg_gops, avg_time, avg_perf, perf_std_dev);
     }
     static void getHorthogPerf(double &avg_gops, double &avg_time, double &avg_perf, double &perf_std_dev)
     {

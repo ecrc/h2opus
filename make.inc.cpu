@@ -1,11 +1,12 @@
 # This is an example configuration for CPU backend (default)
 
-# use single precision (default is double precision)
-H2OPUS_USE_SINGLE_PRECISION=1
+# Uncomment to use single precision (default is double precision)
+# H2OPUS_USE_SINGLE_PRECISION = 1
 
 # detect if MKL is available
 ifneq ($(MKLROOT),)
-  H2OPUS_USE_MKL=1
+  # Tell H2OPUS to take advantage of MKL routines
+  H2OPUS_USE_MKL = 1
 else
   ifdef H2OPUS_USE_MKL
     undefine H2OPUS_USE_MKL
@@ -15,29 +16,51 @@ endif
 # C++ compiler
 CXX ?= g++
 
-# Compiler flags (tested with both GNU and Intel)
-CXXFLAGS = -fopenmp -m64 -O3 -std=c++11 -pthread -DH2OPUS_PROFILING_ENABLED
+# if you want to use the distributed version, use the MPI compiler
+# H2OPUS_USE_MPI = 1
+# CXX = mpicxx
+
+# Compiler flags
+CXXFLAGS = -fPIC -fopenmp -O3 -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
 LDFLAGS = -ldl -lpthread -lm -fopenmp
 
-# cblas headers and linking line
+# Enable shared libraries (default is static only)
+H2OPUS_ENABLE_SHARED = 1
+
+# special math headers and linking line
 ifneq ($(MKLROOT),)
-  H2OPUS_CBLAS_INCDIR = $(MKLROOT)/include
+  # We use the random number generator library VSL
+  BLAS_INCDIR = $(MKLROOT)/include
   #alternatively, we can use CXXCPPFLAGS
   #CXXCPPFLAGS += -I/$(MKLROOT)/include
-  H2OPUS_CBLAS_LIBS = -Wl,-rpath,$(MKLROOT)/lib/intel64 -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core
+
+  # We link against the multithreaded version
+  # BLAS calls within batched routines will be sequential because we use
+  #   mkl_domain_set_num_threads(H2OPUS_BATCH_BLAS_THREADS, MKL_DOMAIN_BLAS)
+  # use CXXCPPFLAGS = -DH2OPUS_BATCH_BLAS_THREADS=n to change the default value of 1
+  BLAS_LIBS = -Wl,-rpath,$(MKLROOT)/lib/intel64 -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core
 else
   # this example file uses openblas
   # but you can use your favorite BLAS/LAPACK distro
-  # as long as it provides the C interface via cblas.h and lapacke.h
-  H2OPUS_CBLAS_INCDIR = $(OPENBLAS_DIR)/include
-  H2OPUS_CBLAS_LIBS = -Wl,-rpath,$(OPENBLAS_DIR)/lib -L$(OPENBLAS_DIR)/lib -lopenblas
+  # H2OPUS has special support for
+  # - MKL (see above)
+  # - BLIS/FLAME (see make.inc.aocl)
+  # - ESSL (see make.inc.ibm)
+  # - ASL (see make.inc.nec)
+  ifneq ($(OPENBLAS_DIR),)
+    BLAS_LIBS = -Wl,-rpath,$(OPENBLAS_DIR)/lib -L$(OPENBLAS_DIR)/lib -lopenblas
+  else # fallback to system-wide availability
+    BLAS_LIBS = -llapack -lblas
+  endif
+  # Specify Fortran name mangling (default is add)
+  # H2OPUS_FMANGLE_TYPE = add       # e.g. dgemm -> dgemm_
+  # H2OPUS_FMANGLE_TYPE = upper     # e.g. dgemm -> DGEMM
+  # H2OPUS_FMANGLE_TYPE = nochange  # e.g. dgemm -> dgemm
 endif
 
-# for CPU only builds, we need thrust
-ifneq ($(THRUST_DIR),)
-  H2OPUS_THRUST_INCDIR = $(THRUST_DIR)/include
-  #alternatively, we can use CXXCPPFLAGS
-  #CXXCPPFLAGS += $(THRUST_DIR)/include
-endif
+# for CPU only builds, we need Thrust headers
+THRUST_INCDIR = $(THRUST_DIR)/include
+#alternatively, we can use CXXCPPFLAGS
+#CXXCPPFLAGS += $(THRUST_DIR)/include

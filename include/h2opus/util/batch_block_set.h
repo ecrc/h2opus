@@ -24,4 +24,7 @@ void batchBlockSetZero(cudaStream_t stream, int *rows_batch, int *cols_batch, in
 void batchBlockSetZero(cudaStream_t stream, int *rows_batch, int *cols_batch, int max_rows, int max_cols,
                        double **block_ptrs, int *ld_batch, int ops);
 
+void batchBlockSetUpperZero(cudaStream_t stream, int m, int n, float **A_ptrs, int lda, int batchCount);
+void batchBlockSetUpperZero(cudaStream_t stream, int m, int n, double **A_ptrs, int lda, int batchCount);
+
 #endif

@@ -22,7 +22,7 @@ struct H2OpusWorkspaceState
     {
         setHostBytes(h_data_bytes + data, h_ptrs_bytes + ptrs);
     }
-#ifdef H2OPUS_USE_GPU
+
     void addDeviceBytes(size_t data, size_t ptrs)
     {
         setDeviceBytes(d_data_bytes + data, d_ptrs_bytes + ptrs);
@@ -33,7 +33,7 @@ struct H2OpusWorkspaceState
         d_data_bytes = data;
         d_ptrs_bytes = ptrs;
     }
-#endif
+
     void setHostBytes(size_t data, size_t ptrs)
     {
         h_data_bytes = data;
@@ -42,34 +42,42 @@ struct H2OpusWorkspaceState
 
     void setBytes(size_t data, size_t ptrs, int hw)
     {
-        if (hw == H2OPUS_HWTYPE_GPU)
-        {
-#ifdef H2OPUS_USE_GPU
-            setDeviceBytes(data, ptrs);
-#else
-            assert(false);
-#endif
-        }
-        else
+        if (hw == H2OPUS_HWTYPE_CPU)
             setHostBytes(data, ptrs);
+        else
+            setDeviceBytes(data, ptrs);
+    }
+
+    void setDataBytes(size_t bytes, int hw)
+    {
+        if (hw == H2OPUS_HWTYPE_CPU)
+            h_data_bytes = bytes;
+        else
+            d_data_bytes = bytes;
+    }
+
+    void setPointerBytes(size_t bytes, int hw)
+    {
+        if (hw == H2OPUS_HWTYPE_CPU)
+            h_ptrs_bytes = bytes;
+        else
+            d_ptrs_bytes = bytes;
+    }
+
+    size_t getDataBytes(int hw)
+    {
+        return (hw == H2OPUS_HWTYPE_CPU ? h_data_bytes : d_data_bytes);
+    }
+
+    size_t getPointerBytes(int hw)
+    {
+        return (hw == H2OPUS_HWTYPE_CPU ? h_ptrs_bytes : d_ptrs_bytes);
     }
 
     void getBytes(size_t &data, size_t &ptrs, int hw)
     {
-        if (hw == H2OPUS_HWTYPE_GPU)
-        {
-#ifdef H2OPUS_USE_GPU
-            data = d_data_bytes;
-            ptrs = d_ptrs_bytes;
-#else
-            assert(false);
-#endif
-        }
-        else
-        {
-            data = h_data_bytes;
-            ptrs = h_ptrs_bytes;
-        }
+        data = getDataBytes(hw);
+        ptrs = getPointerBytes(hw);
     }
 };
 
@@ -83,6 +91,7 @@ struct H2OpusWorkspace
 {
   private:
     H2OpusWorkspaceState allocated_ws_state;
+    H2OpusWorkspaceState allocator_state;
     void *h_data, *h_ptrs;
 #ifdef H2OPUS_USE_GPU
     void *d_data, *d_ptrs;
@@ -109,6 +118,54 @@ struct H2OpusWorkspace
             free(h_data);
         if (h_ptrs)
             free(h_ptrs);
+    }
+
+    void resetAllocatorState()
+    {
+        allocator_state.setHostBytes(0, 0);
+#ifdef H2OPUS_USE_GPU
+        allocator_state.setDeviceBytes(0, 0);
+#endif
+    }
+
+    H2OpusWorkspaceState getAllocatorState()
+    {
+        return allocator_state;
+    }
+
+    template <class T> void allocateEntries(size_t entries, T **ptr, int hw)
+    {
+        size_t current_bytes = allocator_state.getDataBytes(hw);
+
+        // align to type T
+        current_bytes += (current_bytes % sizeof(T));
+
+        if (ptr)
+        {
+            void *data_base = getData(hw);
+            *ptr = (T *)((unsigned char *)data_base + current_bytes);
+        }
+
+        // Add bytes
+        current_bytes += entries * sizeof(T);
+        allocator_state.setDataBytes(current_bytes, hw);
+    }
+
+    template <class T> void allocatePointerEntries(size_t entries, T ***ptr, int hw)
+    {
+        size_t current_bytes = allocator_state.getPointerBytes(hw);
+
+        // align to type T*
+        current_bytes += (current_bytes % sizeof(T *));
+
+        if (ptr)
+        {
+            void *ptr_base = getPtrs(hw);
+            *ptr = (T **)((unsigned char *)ptr_base + current_bytes);
+        }
+
+        current_bytes += entries * sizeof(T *);
+        allocator_state.setPointerBytes(current_bytes, hw);
     }
 
     H2OpusWorkspaceState getWorkspaceState()

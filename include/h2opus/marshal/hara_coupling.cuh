@@ -202,7 +202,7 @@ inline void hara_weak_admissibility_update_marshal_batch(T *sampled_U, int ldu, 
     // Generate morton indexes for a weak admissibility sampling structure
     hara_util_generate_weak_admissibility_morton_indexes<hw>(update_morton_indexes, num_updates, stream);
 
-    // Grab the hnode indexes in the approximation stucture
+    // Grab the hnode indexes in the approximation structure
     hara_util_generate_weak_admissibility_hnode_indexes<hw>(update_morton_indexes, hnode_indexes,
                                                             node_morton_level_index, num_updates, hnode_level_start,
                                                             hnode_level_size, stream);

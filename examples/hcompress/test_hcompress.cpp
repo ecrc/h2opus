@@ -30,7 +30,7 @@ int main(int argc, char **argv)
     if (!arg_parser.valid() || print_help)
     {
         arg_parser.printUsage();
-        exit(0);
+        return 0;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -95,6 +95,7 @@ int main(int argc, char **argv)
     // CPU runs
     const int runs = 10;
 
+    HLibProfile::clear();
     for (int i = 0; i < runs; i++)
     {
         hmatrix = original_hmatrix;
@@ -116,7 +117,7 @@ int main(int argc, char **argv)
            trunc_time / total_time * 100);
     printf("Compression Projection: %.5f s at %.2f GFLOP/s (%.2f of total)\n", project_time, project_perf,
            project_time / total_time * 100);
-    printf("Total compression time: %.5f s at %.2f GLFOP/s\n", total_time, total_perf);
+    printf("Total compression time: %.5f s at %.2f GFLOP/s\n", total_time, total_perf);
 
     if (check_compress_err)
     {
@@ -135,6 +136,7 @@ int main(int argc, char **argv)
     ws_needed = hcompress_workspace(gpu_h);
     h2opus_handle->setWorkspaceState(ws_needed);
 
+    HLibProfile::clear();
     // Orthogonalize and compress
     for (int i = 0; i < runs; i++)
     {
@@ -157,9 +159,7 @@ int main(int argc, char **argv)
            trunc_time / total_time * 100);
     printf("Compression Projection: %.5f s at %.2f GFLOP/s (%.2f of total)\n", project_time, project_perf,
            project_time / total_time * 100);
-    printf("Total compression time: %.5f s at %.2f GLFOP/s\n", total_time, total_perf);
-
-    HLibProfile::clear();
+    printf("Total compression time: %.5f s at %.2f GFLOP/s\n", total_time, total_perf);
 
     if (check_compress_err)
     {

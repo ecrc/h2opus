@@ -34,6 +34,9 @@ template <class T, int hw> class TH2OpusBoxEdgeAdmissibility : public TH2OpusAdm
         T diam_u = h2opusBBoxDiam<T, hw>(kd_tree, node_index_u);
         T diam_v = h2opusBBoxDiam<T, hw>(kd_tree, node_index_v);
 
+        if (diam_u == 0 || diam_v == 0)
+            return false;
+
         return (std::min(diam_u, diam_v) <= eta * dist);
     }
 
@@ -54,6 +57,9 @@ template <class T, int hw> class TH2OpusBoxCenterAdmissibility : public TH2OpusA
         T dist = h2opusBBoxCenterDist<T, hw>(kd_tree, node_index_u, node_index_v);
         T diam_u = h2opusBBoxDiam<T, hw>(kd_tree, node_index_u);
         T diam_v = h2opusBBoxDiam<T, hw>(kd_tree, node_index_v);
+
+        if (diam_u == 0 || diam_v == 0)
+            return false;
 
         return (0.5 * (diam_u + diam_v) <= eta * dist);
     }

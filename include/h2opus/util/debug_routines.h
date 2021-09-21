@@ -5,10 +5,10 @@
 #include <h2opus/core/hmatrix.h>
 
 void expandHmatrix(HMatrix &hmatrix, H2Opus_Real *matrix, int dense = 1, int level = -1);
-void dumpHMatrix(HMatrix &hmatrix, int digits);
-void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label);
-void dumpTransferLevel(BasisTree &basis_tree, int digits, int level);
-void dumpCouplingMatrices(HMatrix &hmatrix, int digits);
+void dumpHMatrix(HMatrix &hmatrix, int digits, FILE *fp);
+void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label, FILE *fp);
+void dumpTransferLevel(BasisTree &basis_tree, int digits, int level, FILE *fp);
+void dumpCouplingMatrices(HMatrix &hmatrix, int digits, FILE *fp);
 void dumpTikzMatrixIndices(HMatrix &hmatrix);
 void expandBasis(BasisTree &basis_tree, int node_index, H2Opus_Real *matrices, int depth, int n, int max_rank);
 void outputEps(HMatrix &h, const char *filename, int level = -1);
@@ -24,6 +24,12 @@ void dumpHgemvTreeContainer(BasisTreeLevelData &level_data, std::vector<H2Opus_R
                             int digits, int hw = H2OPUS_HWTYPE_CPU);
 void printDenseMatrix(float *matrix, int ldm, int m, int n, int digits, const char *name, int hw = H2OPUS_HWTYPE_CPU);
 void printDenseMatrix(double *matrix, int ldm, int m, int n, int digits, const char *name, int hw = H2OPUS_HWTYPE_CPU);
+void printThrustVector(thrust::host_vector<float> &);
+void printThrustVector(thrust::host_vector<double> &);
+#ifdef H2OPUS_USE_GPU
+void printThrustVector(thrust::device_vector<float> &);
+void printThrustVector(thrust::device_vector<double> &);
+#endif
 
 #ifdef H2OPUS_USE_GPU
 thrust::host_vector<float> copyGPUBlock(float **data_ptrs, int index, int ld, int rows, int cols);
@@ -124,5 +130,12 @@ void printBBoxHierarchy(PointCloud& pt_cloud)
     }
 }
 */
+
+template <class T> inline void save_matrix(T *M, int n, const char *filename)
+{
+    FILE *fp = fopen(filename, "wb");
+    fwrite(M, sizeof(T), n, fp);
+    fclose(fp);
+}
 
 #endif

@@ -35,9 +35,9 @@ template <int hw> struct TLowRankUpdate
         this->num_updates = num_updates;
         this->ldu = this->ldv = n;
 
-        resizeThrustArray(U, num_updates);
-        resizeThrustArray(V, num_updates);
-        resizeThrustArray(hnode_indexes, num_updates);
+        U.resize(num_updates);
+        V.resize(num_updates);
+        hnode_indexes.resize(num_updates);
     }
 
     void setRank(int rank)
@@ -77,8 +77,8 @@ template <int hw> struct TDenseBlockUpdate
         this->num_updates = num_updates;
         this->update_ld = ld;
 
-        resizeThrustArray(M, num_updates);
-        resizeThrustArray(hnode_indexes, num_updates);
+        M.resize(num_updates);
+        hnode_indexes.resize(num_updates);
     }
 };
 

@@ -7,9 +7,10 @@
 template <class T> class H2OpusDataSet
 {
   public:
-    virtual size_t getDimension() const = 0;
+    virtual int getDimension() const = 0;
     virtual size_t getDataSetSize() const = 0;
-    virtual T getDataPoint(size_t index, size_t dimension_index) const = 0;
+    virtual T getDataPoint(size_t index, int dimension_index) const = 0;
+    virtual ~H2OpusDataSet(){};
 };
 
 template <class T, int hw> struct TH2OpusKDTree
@@ -31,7 +32,8 @@ template <class T, int hw> struct TH2OpusKDTree
     DataVectorArray bounding_box_low, bounding_box_high;
 
     std::vector<int> level_ptrs;
-    size_t leaf_size, dimension, data_set_size, depth;
+    size_t leaf_size, data_set_size;
+    int dimension, depth;
 
     void allocateNodes(size_t num_nodes)
     {
@@ -49,58 +51,26 @@ template <class T, int hw> struct TH2OpusKDTree
         }
     }
 
-    // Assumes left and right have been set before this call
-    void computBoundingBox(int node_index)
-    {
-        int left = node_index_left[node_index];
-        int right = node_index_right[node_index];
-
-        assert(left <= right);
-
-        for (int i = 0; i < dimension; i++)
-        {
-            int k = left;
-            T bbox_low, bbox_high;
-
-            T data_set_val = data_set->getDataPoint(index_map[k], i);
-            bbox_low = bbox_high = data_set_val;
-
-            for (k = left + 1; k < right; k++)
-            {
-                data_set_val = data_set->getDataPoint(index_map[k], i);
-                bbox_low = std::min(bbox_low, data_set_val);
-                bbox_high = std::max(bbox_high, data_set_val);
-            }
-
-            bounding_box_low[i][node_index] = bbox_low;
-            bounding_box_high[i][node_index] = bbox_high;
-        }
-    }
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Median Split
-    //////////////////////////////////////////////////////////////////////////////////////////////////////
-    void medianDivideAllocate()
-    {
-        size_t num_points = index_map.size();
-        int tree_levels = ceil(log2((double)num_points / leaf_size)) + 1;
-        int total_nodes = (1 << tree_levels) - 1;
-
-        allocateNodes(total_nodes);
-
-        int node_counter = 0;
-        level_ptrs.resize(tree_levels + 1);
-        for (int i = 0; i < tree_levels; i++)
-        {
-            level_ptrs[i] = node_counter;
-            node_counter += (1 << i);
-        }
-        level_ptrs[tree_levels] = node_counter;
-        depth = tree_levels;
-    }
-
     // Split along the dimension that has the largest span
-    int getMedianSplitDimension(int node_index)
+    int getSplitDimension(DataVector &bbox_low, DataVector &bbox_high)
+    {
+        T split_span = bbox_high[0] - bbox_low[0];
+        int split_dim = 0;
+
+        for (int i = 1; i < dimension; i++)
+        {
+            T span = bbox_high[i] - bbox_low[i];
+            if (span > split_span)
+            {
+                split_span = span;
+                split_dim = i;
+            }
+        }
+
+        return split_dim;
+    }
+
+    int getSplitDimension(int node_index)
     {
         T max_span = bounding_box_high[0][node_index] - bounding_box_low[0][node_index];
         int split_dim = 0;
@@ -115,6 +85,101 @@ template <class T, int hw> struct TH2OpusKDTree
             }
         }
         return split_dim;
+    }
+
+    // Assumes left and right have been set before this call
+    void computBoundingBox(int node_index)
+    {
+        int left = node_index_left[node_index];
+        int right = node_index_right[node_index];
+
+        DataVector bbox_low(dimension), bbox_high(dimension);
+        computBoundingBox(left, right, bbox_low, bbox_high);
+        setBoundingBox(node_index, bbox_low, bbox_high);
+    }
+
+    void computBoundingBox(int left, int right, DataVector &bbox_low, DataVector &bbox_high)
+    {
+        assert(left <= right);
+
+        for (int i = 0; i < dimension; i++)
+        {
+            int k = left;
+            T bbox_low_dim, bbox_high_dim;
+
+            T data_set_val = data_set->getDataPoint(index_map[k], i);
+            bbox_low_dim = bbox_high_dim = data_set_val;
+
+            for (k = left + 1; k < right; k++)
+            {
+                data_set_val = data_set->getDataPoint(index_map[k], i);
+                bbox_low_dim = std::min(bbox_low_dim, data_set_val);
+                bbox_high_dim = std::max(bbox_high_dim, data_set_val);
+            }
+
+            bbox_low[i] = bbox_low_dim;
+            bbox_high[i] = bbox_high_dim;
+        }
+    }
+
+    void setBoundingBox(int node_index, DataVector &bbox_low, DataVector &bbox_high)
+    {
+        for (int i = 0; i < dimension; i++)
+        {
+            bounding_box_low[i][node_index] = bbox_low[i];
+            bounding_box_high[i][node_index] = bbox_high[i];
+        }
+    }
+
+    struct KDTreeNode
+    {
+        KDTreeNode(int dim)
+        {
+            bbox_low.resize(dim);
+            bbox_high.resize(dim);
+            left_child = right_child = parent = NULL;
+        }
+        int left, right, level, level_index;
+        KDTreeNode *left_child, *right_child, *parent;
+        DataVector bbox_low, bbox_high;
+    };
+
+    int upper_power_of_two(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        v++;
+        return v;
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Median Split
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    void medianDivideAllocate()
+    {
+        size_t num_points = index_map.size();
+        int tree_levels = ceil(log2((double)num_points / leaf_size)) + 1;
+        if (tree_levels < 0)
+        {
+            printf("Leaf size %ld was too large for a data set of size %ld\n", leaf_size, num_points);
+            exit(-1);
+        }
+        int total_nodes = (1 << tree_levels) - 1;
+
+        allocateNodes(total_nodes);
+
+        int node_counter = 0;
+        level_ptrs.resize(tree_levels + 1);
+        for (int i = 0; i < tree_levels; i++)
+        {
+            level_ptrs[i] = node_counter;
+            node_counter += (1 << i);
+        }
+        level_ptrs[tree_levels] = node_counter;
+        depth = tree_levels;
     }
 
     // Median sort needs a sort
@@ -162,7 +227,7 @@ template <class T, int hw> struct TH2OpusKDTree
         {
             // Figure out split dimension. In this case we use the dimension with the largest span
             // (i.e. we split along the longest edge of the bounding box)
-            int split_dim = getMedianSplitDimension(node_index);
+            int split_dim = getSplitDimension(node_index);
 
             int *index_map_start = vec_ptr(index_map) + left;
             int count = right - left;
@@ -172,6 +237,158 @@ template <class T, int hw> struct TH2OpusKDTree
             medianDivide(left, left + split_index, node_index, level + 1, node_tails, level_nodes_alloc);
             medianDivide(left + split_index, right, node_index, level + 1, node_tails, level_nodes_alloc);
         }
+    }
+
+    // Uniform split
+    KDTreeNode *medianUniformSplit(int left, int right, KDTreeNode *parent, int level,
+                                   std::vector<int> &level_nodes_alloc)
+    {
+        while ((size_t)level >= level_nodes_alloc.size())
+            level_nodes_alloc.push_back(0);
+
+        KDTreeNode *node = new KDTreeNode(dimension);
+        node->level_index = level_nodes_alloc[level]++;
+        node->level = level;
+        node->left = left;
+        node->right = right;
+        node->parent = parent;
+
+        computBoundingBox(left, right, node->bbox_low, node->bbox_high);
+
+        if (right - left > (int)leaf_size)
+        {
+            // Find the largest dim of the bounding box to split along
+            int split_dim = getSplitDimension(node->bbox_low, node->bbox_high);
+
+            // Sort the points
+            int *index_map_start = vec_ptr(index_map) + left;
+            int count = right - left;
+            std::sort(index_map_start, index_map_start + count, MedianSplitCompare(data_set, split_dim));
+
+            // Split the point set into two such that one half is a multiple of the leaf size
+            // and the other half is the remaining points
+            int split_index = upper_power_of_two((int)((count + leaf_size - 1) / leaf_size)) / 2;
+            split_index = split_index * leaf_size;
+
+            node->left_child = medianUniformSplit(left, left + split_index, node, level + 1, level_nodes_alloc);
+            node->right_child = medianUniformSplit(left + split_index, right, node, level + 1, level_nodes_alloc);
+        }
+
+        return node;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Middle split
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    void freeKDTreeNode(KDTreeNode *node)
+    {
+        if (node == NULL)
+            return;
+
+        freeKDTreeNode(node->left_child);
+        freeKDTreeNode(node->right_child);
+
+        delete node;
+    }
+
+    void flattenKDTreeNode(KDTreeNode *node, int parent_node, int level, std::vector<int> &level_nodes_alloc,
+                           std::vector<int> &node_tails)
+    {
+        if (!node)
+            return;
+
+        int node_index = level_ptrs[level] + level_nodes_alloc[level];
+        level_nodes_alloc[level]++;
+        node_index_left[node_index] = node->left;
+        node_index_right[node_index] = node->right;
+        setBoundingBox(node_index, node->bbox_low, node->bbox_high);
+
+        // Set the node parent, head, and next pointers
+        parent[node_index] = parent_node;
+
+        if (parent_node != H2OPUS_EMPTY_NODE)
+        {
+            if (head[parent_node] == H2OPUS_EMPTY_NODE)
+            {
+                head[parent_node] = node_index;
+                node_tails[parent_node] = node_index;
+            }
+            else
+            {
+                next[node_tails[parent_node]] = node_index;
+                node_tails[parent_node] = node_index;
+            }
+        }
+
+        flattenKDTreeNode(node->left_child, node_index, level + 1, level_nodes_alloc, node_tails);
+        flattenKDTreeNode(node->right_child, node_index, level + 1, level_nodes_alloc, node_tails);
+    }
+
+    void flattenKDTree(KDTreeNode *root, std::vector<int> &level_nodes_alloc)
+    {
+        depth = (int)level_nodes_alloc.size();
+        level_ptrs.resize(depth + 1, 0);
+
+        for (int i = 0; i < depth; i++)
+        {
+            level_ptrs[i + 1] = level_ptrs[i] + level_nodes_alloc[i];
+            level_nodes_alloc[i] = 0;
+        }
+
+        int total_nodes = level_ptrs[depth];
+        allocateNodes(total_nodes);
+        std::vector<int> node_tails(total_nodes, 0);
+        flattenKDTreeNode(root, H2OPUS_EMPTY_NODE, 0, level_nodes_alloc, node_tails);
+    }
+
+    KDTreeNode *middleSplit(int left, int right, KDTreeNode *parent, int level, std::vector<int> &level_nodes_alloc)
+    {
+        while (level >= level_nodes_alloc.size())
+            level_nodes_alloc.push_back(0);
+
+        KDTreeNode *node = new KDTreeNode(dimension);
+        node->level_index = level_nodes_alloc[level]++;
+        node->level = level;
+        node->left = left;
+        node->right = right;
+        node->parent = parent;
+
+        computBoundingBox(left, right, node->bbox_low, node->bbox_high);
+
+        if (right - left > leaf_size)
+        {
+            // Find the largest dim of the bounding box to split along
+            int split_dim = getSplitDimension(node->bbox_low, node->bbox_high);
+
+            // Split down the middle
+            T split_val = (node->bbox_low[split_dim] + node->bbox_high[split_dim]) / 2;
+            int *indices = vec_ptr(index_map) + left;
+            int split_index = planeSplit(indices, right - left, split_dim, split_val);
+
+            node->left_child = middleSplit(left, left + split_index, node, level + 1, level_nodes_alloc);
+            node->right_child = middleSplit(left + split_index, right, node, level + 1, level_nodes_alloc);
+        }
+
+        return node;
+    }
+
+    int planeSplit(int *indices, int count, int split_dim, T split_val)
+    {
+        int left = 0, right = count - 1;
+
+        while (left < right)
+        {
+            // Advance until the point at the left index is to the right of the split value
+            while (left < count && data_set->getDataPoint(indices[left], split_dim) <= split_val)
+                left++;
+            // Retreat until the point at the right index is to the left of the split value
+            while (right >= 0 && data_set->getDataPoint(indices[right], split_dim) > split_val)
+                right--;
+            if (left < right)
+                std::swap(indices[left], indices[right]);
+        }
+
+        return left;
     }
 
   public:
@@ -228,10 +445,41 @@ template <class T, int hw> struct TH2OpusKDTree
         medianDivide(0, data_set_size, H2OPUS_EMPTY_NODE, 0, node_tails, level_nodes_alloc);
     }
 
+    void buildKDtreeMedianUniformSplit()
+    {
+        std::vector<int> level_nodes_alloc;
+        KDTreeNode *root = medianUniformSplit(0, data_set_size, NULL, 0, level_nodes_alloc);
+        flattenKDTree(root, level_nodes_alloc);
+        freeKDTreeNode(root);
+    }
+
+    void buildKDtreeMiddleSplit()
+    {
+        std::vector<int> level_nodes_alloc;
+        KDTreeNode *root = middleSplit(0, data_set_size, NULL, 0, level_nodes_alloc);
+        flattenKDTree(root, level_nodes_alloc);
+        freeKDTreeNode(root);
+    }
+
     void getBoundingBoxComponent(size_t node_index, int component, T &low, T &high)
     {
         low = bounding_box_low[component][node_index];
         high = bounding_box_high[component][node_index];
+    }
+
+    int getLevelSize(size_t level_index)
+    {
+        return level_ptrs[level_index + 1] - level_ptrs[level_index];
+    }
+
+    int getLevelNodeStartIndex(size_t level_index)
+    {
+        return level_ptrs[level_index];
+    }
+
+    int getLevelNodeEndIndex(size_t level_index)
+    {
+        return level_ptrs[level_index + 1];
     }
 
     int getNodeStartIndex(size_t node_index)

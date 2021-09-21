@@ -1,0 +1,35 @@
+# Example configuration using AOCL libraries compiled for AOCC 
+
+# This is a shortcut for H2OPUS_USE_BLIS, H2OPUS_USE_FLAME, H2OPUS_USE_AMDRNG
+# All the above configurations can be used separately
+H2OPUS_USE_AOCL = 1
+
+CXX = clang
+# CXX = mpicxx
+# H2OPUS_USE_MPI = 1
+CXXFLAGS = -fopenmp -Wall -O3 -march=znver3
+
+CXXCPPFLAGS = -DH2OPUS_PROFILING_ENABLED
+
+# BLAS/LAPACK
+# We link against the multithreaded version, number of threads can be configured via the
+# environment variable BLIS_SET_NUM_THREADS
+# BLAS calls within batched routines will be sequential because we use
+#   bli_thread_set_num_threads(H2OPUS_BATCH_BLAS_THREADS)
+# use CXXCPPFLAGS = -DH2OPUS_BATCH_BLAS_THREADS=n to change the default value of 1
+AOCL_DIR ?= /opt/aocl
+BLAS_LIBS = -Wl,-rpath,$(AOCL_DIR)/lib -L$(AOCL_DIR)/lib -Wl,-Bstatic -lflame -Wl,-Bdynamic -lblis-mt
+
+CXXCPPFLAGS += -DH2OPUS_USE_BATCHED_BLAS
+
+# AMD random number generator 
+# Note, I would love to link against shared libraries, but it is a mess
+#  - libamd_rng.so needs gfortran libraries
+LDFLAGS = $(AOCL_DIR)/lib/librng_amd.a $(AOCL_DIR)/lib/libamdsecrng.a
+# LDFLAGS = -lrng_amd -lamdsecrng
+
+# Resolve missing symbols
+LDFLAGS += -fopenmp -lstdc++ -lamdlibm -lm
+
+# Thrust
+THRUST_INCDIR = $(THRUST_DIR)/include

@@ -25,6 +25,9 @@ void horthog_upsweep_leaves(BasisTree &basis_tree, HorthogWorkspace &workspace, 
 void horthog_upsweep(BasisTree &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
                      std::vector<int> &new_ranks, h2opusComputeStream_t stream);
 
+void horthog_stitch(BasisTree &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
+                    std::vector<int> &new_ranks, h2opusComputeStream_t stream);
+
 void horthog_project(HNodeTree &hnodes, int start_level, int end_level, BasisTreeLevelData &u_level_data,
                      BasisTreeLevelData &v_level_data, HorthogWorkspace &workspace, h2opusComputeStream_t stream);
 
@@ -46,6 +49,9 @@ void horthog_upsweep_leaves(BasisTree_GPU &basis_tree, HorthogWorkspace &workspa
 
 void horthog_upsweep(BasisTree_GPU &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
                      std::vector<int> &new_ranks, h2opusComputeStream_t stream);
+
+void horthog_stitch(BasisTree_GPU &basis_tree, HorthogWorkspace &workspace, std::vector<H2Opus_Real *> &T_hat,
+                    std::vector<int> &new_ranks, h2opusComputeStream_t stream);
 
 void horthog_project(HNodeTree_GPU &hnodes, int start_level, int end_level, BasisTreeLevelData &u_level_data,
                      BasisTreeLevelData &v_level_data, HorthogWorkspace &workspace, h2opusComputeStream_t stream);

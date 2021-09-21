@@ -46,7 +46,7 @@ struct HcompressProjectTopLevelWorkspace
 
 struct HcompressWorkspace
 {
-    HcompressOptimalBGenWorkspace optimal_bgen;
+    HcompressOptimalBGenWorkspace optimal_u_bgen, optimal_v_bgen;
     HcompressUpsweepWorkspace u_upsweep, v_upsweep;
     HcompressProjectTopLevelWorkspace u_top_level, v_top_level;
     HcompressProjectionWorkspace projection;
@@ -67,6 +67,22 @@ H2OpusWorkspaceState hcompress_get_workspace(BasisTreeLevelData &u_level_data, B
                                              HNodeTreeLevelData *offdiag_hnode_level_data,
                                              std::vector<int> *offdiag_max_nodes, bool symmetric,
                                              HcompressWorkspace &workspace, h2opusHandle_t h2opus_handle, int hw);
+
+H2OpusWorkspaceState hcompress_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                                         HNodeTreeLevelData &hnode_level_data, std::vector<int> &diagonal_max_row_nodes,
+                                         std::vector<int> &diagonal_max_col_nodes,
+                                         HNodeTreeLevelData *offdiag_hnode_level_data,
+                                         std::vector<int> *offdiag_max_row_nodes,
+                                         std::vector<int> *offdiag_max_col_nodes, bool symmetric, int hw);
+
+H2OpusWorkspaceState hcompress_get_workspace(BasisTreeLevelData &u_level_data, BasisTreeLevelData &v_level_data,
+                                             HNodeTreeLevelData &hnode_level_data,
+                                             std::vector<int> &diagonal_max_row_nodes,
+                                             std::vector<int> &diagonal_max_col_nodes,
+                                             HNodeTreeLevelData *offdiag_hnode_level_data,
+                                             std::vector<int> *offdiag_max_row_nodes,
+                                             std::vector<int> *offdiag_max_col_nodes, bool symmetric,
+                                             HcompressWorkspace *workspace, h2opusHandle_t h2opus_handle, int hw);
 ////////////////////////////////////////////////////////////////////////
 // Main workspace routines
 ////////////////////////////////////////////////////////////////////////

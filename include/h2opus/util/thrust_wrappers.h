@@ -1,20 +1,24 @@
 #ifndef __THRUST_WRAPPERS_H__
 #define __THRUST_WRAPPERS_H__
 
-#include <h2opus/core/h2opus_defs.h>
-#include <h2opus/core/h2opus_handle.h>
 #include <h2opus/core/thrust_runtime.h>
+#include <thrust/random.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Some array utility functions
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void exclusiveScan(int *array, size_t num_entries, int *result, int init, h2opusComputeStream_t stream, int hw);
-void inclusiveScan(int *array, size_t num_entries, int *result, h2opusComputeStream_t stream, int hw);
+int exclusiveScan(const int *array, size_t num_entries, int *result, int init, h2opusComputeStream_t stream, int hw);
+int inclusiveScan(const int *array, size_t num_entries, int *result, h2opusComputeStream_t stream, int hw);
 
 // Fill array with a value
 void fillArray(float *array, size_t num_entries, float val, h2opusComputeStream_t stream, int hw);
 void fillArray(double *array, size_t num_entries, double val, h2opusComputeStream_t stream, int hw);
 void fillArray(int *array, size_t num_entries, int val, h2opusComputeStream_t stream, int hw);
+void fillArray(float **array, size_t num_entries, float *val, h2opusComputeStream_t stream, int hw);
+void fillArray(double **array, size_t num_entries, double *val, h2opusComputeStream_t stream, int hw);
+
+// Generate a sequence
+void generateSequence(int *array, size_t num_entries, int start_val, h2opusComputeStream_t stream, int hw);
 
 // Min and max elements of arrays
 int getMaxElement(int *a, size_t elements, h2opusComputeStream_t stream, int hw);
@@ -23,6 +27,13 @@ float getMaxElement(float *a, size_t elements, h2opusComputeStream_t stream, int
 double getMaxElement(double *a, size_t elements, h2opusComputeStream_t stream, int hw);
 float getMaxAbsElement(float *a, size_t elements, h2opusComputeStream_t stream, int hw);
 double getMaxAbsElement(double *a, size_t elements, h2opusComputeStream_t stream, int hw);
+
+// Segmented reductions
+int getSegmentedMaxElements(int *a, size_t elements, size_t seg_size, int *seg_maxes, h2opusComputeStream_t stream,
+                            int hw);
+
+// Sort by key
+void sortByKey(int *keys, int *values, size_t elements, bool ascending, h2opusComputeStream_t stream, int hw);
 
 // Argmax (returns max element and its position in the array)
 void argMaxAbsElement(float *a, size_t elements, h2opusComputeStream_t stream, int hw, float &max, size_t &j);
@@ -50,10 +61,6 @@ void standardBasisVector(double *v, size_t n, size_t j, h2opusComputeStream_t st
 
 // A[i] = std::min(V - A[i], 0)
 void getRemainingElements(int *a, int v, size_t elements, h2opusComputeStream_t stream, int hw);
-
-// host only
-void generateRandomColumn(double *A, size_t n, thrust::minstd_rand &state);
-void generateRandomColumn(float *A, size_t n, thrust::minstd_rand &state);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Generating array of pointers from either a strided array or another array of pointers
@@ -94,58 +101,29 @@ void permute_vectors(double *original, double *permuted, int n, int num_vectors,
                      h2opusComputeStream_t stream);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Getting around thrust's annoying inability to simply resize vectors without
-// using nvcc as the compiler when device vectors are involved
+// Swap two vectors
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void swap_vectors(int n, float *x, int incx, float *y, int incy, int hw, h2opusComputeStream_t stream);
+void swap_vectors(int n, double *x, int incx, double *y, int incy, int hw, h2opusComputeStream_t stream);
+void swap_vectors(int n, float **x, int incx, float **y, int incy, int hw, h2opusComputeStream_t stream);
+void swap_vectors(int n, double **x, int incx, double **y, int incy, int hw, h2opusComputeStream_t stream);
+void swap_vectors(int n, int *x, int incx, int *y, int incy, int hw, h2opusComputeStream_t stream);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// inline functions
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template <int hw> inline int thrust_get_value(int *ptr);
+
+template <> inline int thrust_get_value<H2OPUS_HWTYPE_CPU>(int *ptr)
+{
+    return *ptr;
+}
+
 #ifdef H2OPUS_USE_GPU
-void resizeThrustArray(thrust::device_vector<float> &array, size_t new_size);
-void resizeThrustArray(thrust::device_vector<double> &array, size_t new_size);
-void resizeThrustArray(thrust::device_vector<int> &array, size_t new_size);
-void resizeThrustArray(thrust::device_vector<float *> &array, size_t new_size);
-void resizeThrustArray(thrust::device_vector<double *> &array, size_t new_size);
-
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<float>>::type &array, size_t new_size);
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<double>>::type &array, size_t new_size);
-void resizeThrustArray(typename TTreeContainer<thrust::device_vector<int>>::type &array, size_t new_size);
-
-void copyThrustArray(thrust::device_vector<double> &dest, const thrust::device_vector<double> &src);
-void copyThrustArray(thrust::device_vector<float> &dest, const thrust::device_vector<float> &src);
-void copyThrustArray(thrust::device_vector<int> &dest, const thrust::device_vector<int> &src);
-
-void copyThrustArray(thrust::host_vector<double> &dest, const thrust::device_vector<double> &src);
-void copyThrustArray(thrust::host_vector<float> &dest, const thrust::device_vector<float> &src);
-void copyThrustArray(thrust::host_vector<int> &dest, const thrust::device_vector<int> &src);
-
-void copyThrustArray(thrust::device_vector<double> &dest, const thrust::host_vector<double> &src);
-void copyThrustArray(thrust::device_vector<float> &dest, const thrust::host_vector<float> &src);
-void copyThrustArray(thrust::device_vector<int> &dest, const thrust::host_vector<int> &src);
+template <> inline int thrust_get_value<H2OPUS_HWTYPE_GPU>(int *ptr)
+{
+    return *thrust::device_ptr<int>(ptr);
+}
 #endif
-
-void resizeThrustArray(thrust::host_vector<float> &array, size_t new_size);
-void resizeThrustArray(thrust::host_vector<double> &array, size_t new_size);
-void resizeThrustArray(thrust::host_vector<int> &array, size_t new_size);
-void resizeThrustArray(thrust::host_vector<float *> &array, size_t new_size);
-void resizeThrustArray(thrust::host_vector<double *> &array, size_t new_size);
-
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<float>>::type &array, size_t new_size);
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<double>>::type &array, size_t new_size);
-void resizeThrustArray(typename TTreeContainer<thrust::host_vector<int>>::type &array, size_t new_size);
-
-void copyThrustArray(thrust::host_vector<double> &dest, const thrust::host_vector<double> &src);
-void copyThrustArray(thrust::host_vector<float> &dest, const thrust::host_vector<float> &src);
-void copyThrustArray(thrust::host_vector<int> &dest, const thrust::host_vector<int> &src);
-
-template <class T> void copyThrustArray(std::vector<T> &dest, const std::vector<T> &src)
-{
-    dest = src;
-}
-template <class T> void resizeThrustArray(std::vector<T> &array, size_t new_size)
-{
-    array.resize(new_size);
-}
-template <class T> void resizeThrustArray(typename TTreeContainer<thrust::host_vector<T>>::type &array, size_t new_size)
-{
-    array.resize(new_size);
-}
 
 #endif
