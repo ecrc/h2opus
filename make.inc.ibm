@@ -5,6 +5,9 @@
 H2OPUS_USE_MPI = 1
 CXX = mpicxx 
 
+# Assuming we are using xlc++
+CXXCPPFLAGS = -DTHRUST_IGNORE_DEPRECATED_CPP_DIALECT
+
 # Compiler flags
 CXXFLAGS = -qPIC -qmaxmem=-1 -Wall -qsmp=omp -O2 -std=c++14 -DH2OPUS_PROFILING_ENABLED
 

@@ -17,7 +17,7 @@ all:
 $(H2OPUS_DIR)/make.inc:
 	@cp make.inc.cpu make.inc
 
-$(LIBH2OPUSVARS): $(H2OPUS_DIR)/make.inc | $(OBJ_DIR)/.keep $(H2OPUS_DIR)/lib/h2opus/.keep
+$(LIBH2OPUSVARS): $(H2OPUS_DIR)/make.inc | $(H2OPUS_DIR)/lib/h2opus/.keep
 	@printf "include $(H2OPUS_DIR)/make.inc" >> $@
 	@$(MAKE) -s dumpmakeinc
 
@@ -50,7 +50,7 @@ write-confheader-define = @printf "\n\#ifndef H2OPUS_$2\n\#define H2OPUS_$2\n\#e
 write-confheader-post   = @printf "\n\#endif\n" >> $1;
 
 config-confheader := $(H2OPUS_DIR)/include/h2opusconf.h
-$(config-confheader): $(LIBH2OPUSVARS)
+$(config-confheader): $(LIBH2OPUSVARS) | $(OBJ_DIR)/.keep
 	@rm -rf $@
 	@echo "########################################################################"
 	@echo "Writing H2OPUS configuration (see make.inc.* examples for customization)"
