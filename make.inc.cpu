@@ -21,13 +21,10 @@ CXX ?= g++
 # CXX = mpicxx
 
 # Compiler flags
-CXXFLAGS = -fPIC -fopenmp -O3 -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED
+CXXFLAGS = -Wall -fPIC -fopenmp -O3 -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
 LDFLAGS = -ldl -lpthread -lm -fopenmp
-
-# Enable shared libraries (default is static only)
-H2OPUS_ENABLE_SHARED = 1
 
 # special math headers and linking line
 ifneq ($(MKLROOT),)

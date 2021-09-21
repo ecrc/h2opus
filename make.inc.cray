@@ -13,6 +13,3 @@ LDFLAGS = -h omp
 
 # for CPU only builds, we need thrust
 THRUST_INCDIR = $(THRUST_DIR)/include
-
-# Build shared library
-H2OPUS_ENABLE_SHARED = 1

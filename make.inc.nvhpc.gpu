@@ -13,7 +13,7 @@ NVCC = $(NVHPC_DIR)/compilers/bin/nvcc
 # When we explicily list -ccbin as option, CXXFLAGS are not propagated to the nvcc compiler
 # We explicitly use GCC as host compiler (default in nvcc anyway)
 # CXX is then used only as a linker
-NVCCFLAGS = -ccbin g++ -Xcompiler -fopenmp -Xcompiler -Wall -std=c++14 --expt-relaxed-constexpr
+NVCCFLAGS = -ccbin g++ -Xcompiler -fopenmp -Xcompiler -Wall -std=c++14 --expt-relaxed-constexpr -Xcompiler -fPIC
 H2OPUS_GENCODE_FLAGS = -gencode arch=compute_80,code=sm_80
 CXXCPPFLAGS += -I$(NVHPC_DIR)/cuda/include -I$(NVHPC_DIR)/math_libs/include -I$(MPI_DIR)/include
 CUDA_LIBS += -Wl,-rpath,$(NVHPC_DIR)/math_libs/lib64 -L$(NVHPC_DIR)/math_libs/lib64 -lcublas -lcusparse -lcusolver -lcurand -Wl,-rpath,$(NVHPC_DIR)/cuda/lib64 -L$(NVHPC_DIR)/cuda/lib64 -lcuda -lcudart

@@ -41,7 +41,7 @@ OPT = -finline-functions -finline-max-depth=5 -fno-defer-inline-template-instant
 # OPT += -fthis-pointer-alias
 # OPT += -fnamed-alias
 
-CXXFLAGS = -Wall $(SILENT) -static-nec $(REP) $(TRACE) -fopenmp -O2 $(OPT) $(DBG) -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED -mschedule-runtime
+CXXFLAGS = -fPIC -Wall $(SILENT) -static-nec $(REP) $(TRACE) -fopenmp -O2 $(OPT) $(DBG) -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED -mschedule-runtime
 
 # Linker flags
 LDFLAGS = -static-nec $(TRACE) -ldl -lpthread -lm -fopenmp

@@ -21,7 +21,7 @@ MPI_DIR = $(OPAL_PREFIX)
 CXX = $(MPI_DIR)/bin/mpicxx
 
 # mpicxx wrapper uses nvc++
-CXXFLAGS = -Wall -mp=multicore
+CXXFLAGS = -fPIC -Wall -mp=multicore
 
 # Enable flops reporting
 CXXCPPFLAGS = -DH2OPUS_PROFILING_ENABLED

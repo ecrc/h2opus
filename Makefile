@@ -32,7 +32,7 @@ RANLIB ?= ranlib
 
 SL_SUFFIX ?= so
 SL ?= $(CXX)
-SL_FLAGS ?= -shared
+SL_FLAGS ?= -fPIC -shared
 SL_LINK_FLAG ?= -Wl,-rpath,
 
 override LIBH2OPUS_static := $(H2OPUS_DIR)/lib/libh2opus.$(AR_SUFFIX)
@@ -224,14 +224,13 @@ H2OPUS_FULL_LIBSI ?= $(SL_LINK_FLAG)$(H2OPUS_INSTALL_DIR)/lib -L$(H2OPUS_INSTALL
 $(OBJ_DIR)/%.o: %.cxx $(config-confheader) $(LIBH2OPUSVARS) | $$(@D)/.keep
 	$(H2OPUS_CXX) $(H2OPUS_CXXCPP) $(H2OPUS_CXXFLAGS) -c $< -o $@
 
-# Build static libraries by default
-ifneq ($(H2OPUS_ENABLE_SHARED),)
+# Both shared and static libraries by default
 LIBH2OPUS := $(LIBH2OPUS_shared) $(LIBH2OPUS_static)
-else
-LIBH2OPUS := $(LIBH2OPUS_static)
-endif
 ifneq ($(H2OPUS_DISABLE_STATIC),)
 LIBH2OPUS = $(filter-out $(LIBH2OPUS_static),$(LIBH2OPUS))
+endif
+ifneq ($(H2OPUS_DISABLE_SHARED),)
+LIBH2OPUS = $(filter-out $(LIBH2OPUS_shared),$(LIBH2OPUS))
 endif
 
 dumpmakeinc:

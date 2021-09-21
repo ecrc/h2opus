@@ -6,10 +6,13 @@ H2OPUS_USE_MPI = 1
 CXX = mpicxx 
 
 # Compiler flags
-CXXFLAGS = -qmaxmem=-1 -Wall -qsmp=omp -O2 -std=c++14 -DH2OPUS_PROFILING_ENABLED
+CXXFLAGS = -qPIC -qmaxmem=-1 -Wall -qsmp=omp -O2 -std=c++14 -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
 LDFLAGS = -qsmp=omp
+
+# Shared linker flags
+SL_FLAGS = -qmkshrobj -qPIC
 
 # Tell H2OPUS to take advantage of ESSL routines for random number generator
 H2OPUS_USE_ESSL = 1

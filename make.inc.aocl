@@ -7,7 +7,7 @@ H2OPUS_USE_AOCL = 1
 CXX = clang
 # CXX = mpicxx
 # H2OPUS_USE_MPI = 1
-CXXFLAGS = -fopenmp -Wall -O3 -march=znver3
+CXXFLAGS = -fPIC -fopenmp -Wall -O3 -march=znver3
 
 CXXCPPFLAGS = -DH2OPUS_PROFILING_ENABLED
 
