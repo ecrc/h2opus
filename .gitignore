@@ -12,6 +12,7 @@ examples/ns/test_ns
 examples/hcompress/test_hcompress
 examples/hcompress/test_hcompress_dist
 examples/hlru/test_hlru_global
+examples/hlru/test_hlru_local
 examples/horthog/test_horthog
 examples/horthog/test_horthog_dist
 examples/fd/test_fd
