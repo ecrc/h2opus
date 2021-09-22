@@ -291,12 +291,11 @@ int main(int argc, char **argv)
 {
     PetscErrorCode ierr;
 
-#ifdef H2OPUS_MPI_THREAD_MULTIPLE
+#if defined(PETSC_HAVE_MPI_INIT_THREAD)
     PETSC_MPI_THREAD_REQUIRED = MPI_THREAD_MULTIPLE;
 #endif
     ierr = PetscInitialize(&argc, &argv, NULL, NULL);
-    if (ierr)
-        return ierr;
+    if (ierr) return ierr;
 
     // Argument parsing
     PetscInt dim = 2;
