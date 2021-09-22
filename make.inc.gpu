@@ -17,7 +17,7 @@ endif
 NVCCFLAGS = -m64 -O3 -std=c++14 --expt-relaxed-constexpr
 
 # replace with your compute capability
-H2OPUS_GENCODE_FLAGS = -gencode arch=compute_70,code=sm_70
+GENCODE_FLAGS = -gencode arch=compute_70,code=sm_70
 
 # We need MAGMA from ICL
 # we specify include folder and linking line

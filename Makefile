@@ -180,9 +180,9 @@ H2OPUS_EXAMPLE_DIRS := \
 ifneq ($(H2OPUS_USE_GPU),)
   ifeq ($(findstring ccbin,$(NVCCFLAGS)),)
     NVCCFLAGS += -ccbin $(CXX)
-    HCXXFLAGS := -x cu $(NVCCFLAGS) $(H2OPUS_GENCODE_FLAGS) $(addprefix -Xcompiler ,$(CXXFLAGS))
+    HCXXFLAGS := -x cu $(NVCCFLAGS) $(GENCODE_FLAGS) $(addprefix -Xcompiler ,$(CXXFLAGS))
   else # if ccbin is in NVCCFLAGS, assumes flags for the host compiler are passed with NVCCFLAGS
-    HCXXFLAGS := -x cu $(NVCCFLAGS) $(H2OPUS_GENCODE_FLAGS)
+    HCXXFLAGS := -x cu $(NVCCFLAGS) $(GENCODE_FLAGS)
   endif
   HCXX := $(NVCC)
 else
