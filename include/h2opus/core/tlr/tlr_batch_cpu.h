@@ -14,7 +14,7 @@ template <class T> struct TLR_Batch<T, H2OPUS_HWTYPE_CPU>
         // T* pt_data = func_gen.getData();
         // int dim = func_gen.getDim();
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(runtime) num_threads(std::min(stream->getMaxOmpThreads(), blockCount))
         for (int b = 0; b < blockCount; b++)
         {
             T *A = block_ptrs[b];
@@ -99,7 +99,7 @@ template <class T> struct TLR_Batch<T, H2OPUS_HWTYPE_CPU>
 
                 if (beta != 1)
                 {
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) num_threads(std::min(stream->getMaxOmpThreads(), rows * cols))
                     for (int i = 0; i < rows * cols; i++)
                     {
                         int row = i % rows, col = i / rows;
@@ -113,7 +113,7 @@ template <class T> struct TLR_Batch<T, H2OPUS_HWTYPE_CPU>
                     T *src = buffer_ptrs[src_index];
                     int ldb = ldb_batch[src_index];
 
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) num_threads(std::min(stream->getMaxOmpThreads(), rows * cols))
                     for (int i = 0; i < rows * cols; i++)
                     {
                         int row = i % rows, col = i / rows;

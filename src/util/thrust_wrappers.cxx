@@ -701,6 +701,7 @@ template <class T> inline __host__ __device__ T *getOperationPtr(T *array, size_
 {
     return array + op_id * stride;
 }
+
 template <class T> inline __host__ __device__ T *getOperationPtr(T **array, size_t op_id, int stride)
 {
     return array[op_id];

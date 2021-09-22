@@ -873,7 +873,7 @@ int tlr_pstrf_select_pivot(TTLR_Matrix<T, hw> &A, int k, H2OpusTLRPotrfWorkspace
         T *update_block = workspace.dense_buffer_D[i];
 
         T block_norm = 0;
-#pragma omp parallel for reduction(+ : block_norm)
+#pragma omp parallel for reduction(+ : block_norm) schedule(runtime) num_threads(std::min(stream->getMaxOmpThreads(), block_size * block_size))
         for (int b = 0; b < block_size * block_size; b++)
             block_norm += (diagonal_block[b] - update_block[b]) * (diagonal_block[b] - update_block[b]);
         block_norm = sqrt(block_norm);

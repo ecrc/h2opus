@@ -1,13 +1,9 @@
 include ../../lib/h2opus/make.inc
 
-################################################################################
-
 OBJDIR := obj
 OBJ_LIST := test_fd.o test_fd_dist.o test_fd_petsc.o
 OBJS := $(addprefix $(OBJDIR)/,$(OBJ_LIST))
 EXE := test_fd test_fd_dist test_fd_petsc
-
-################################################################################
 
 all: build
 
@@ -37,5 +33,3 @@ clean:
 	rm -f $(EXE) $(OBJDIR)/*
 
 clobber: clean
-
-################################################################################

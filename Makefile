@@ -18,7 +18,7 @@ $(H2OPUS_DIR)/make.inc:
 	@cp make.inc.cpu make.inc
 
 $(LIBH2OPUSVARS): $(H2OPUS_DIR)/make.inc | $(H2OPUS_DIR)/lib/h2opus/.keep
-	@printf "include $(H2OPUS_DIR)/make.inc" >> $@
+	@printf "include $(H2OPUS_DIR)/make.inc" > $@
 	@$(MAKE) -s dumpmakeinc
 
 -include make.inc
@@ -227,10 +227,10 @@ $(OBJ_DIR)/%.o: %.cxx $(config-confheader) $(LIBH2OPUSVARS) | $$(@D)/.keep
 # Both shared and static libraries by default
 LIBH2OPUS := $(LIBH2OPUS_shared) $(LIBH2OPUS_static)
 ifneq ($(H2OPUS_DISABLE_STATIC),)
-LIBH2OPUS = $(filter-out $(LIBH2OPUS_static),$(LIBH2OPUS))
+LIBH2OPUS := $(filter-out $(LIBH2OPUS_static),$(LIBH2OPUS))
 endif
 ifneq ($(H2OPUS_DISABLE_SHARED),)
-LIBH2OPUS = $(filter-out $(LIBH2OPUS_shared),$(LIBH2OPUS))
+LIBH2OPUS := $(filter-out $(LIBH2OPUS_shared),$(LIBH2OPUS))
 endif
 
 dumpmakeinc:

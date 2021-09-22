@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdio.h>
 
 /* FORTRAN name mangling */
 

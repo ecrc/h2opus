@@ -80,7 +80,7 @@ void H2OpusHandle::init()
     for (size_t i = 0; i < host_rand_state.size(); i++)
         vslNewStream(&host_rand_state[i], VSL_BRNG_SFMT19937, i + 1);
 #elif defined(H2OPUS_USE_NEC)
-    asl_library_initialize();
+    if (!asl_library_is_initialized()) asl_library_initialize();
     for (size_t i = 0; i < host_rand_state.size(); i++)
     {
         asl_uint32_t seed = i + 1;

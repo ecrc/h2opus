@@ -3,7 +3,16 @@
 H2OPUS_USE_NEC = 1
 
 # C++ compiler
-CXX = nc++
+ifneq ($(NMPI_ROOT),)
+  H2OPUS_USE_MPI = 1
+  CXX = mpinc++
+else
+  CXX = nc++
+endif
+
+# Issues running with shared libraries
+# static PerformaceCounter issues
+H2OPUS_DISABLE_SHARED = 1
 
 # Turn on tracing
 #TRACE = -ftrace
@@ -15,36 +24,21 @@ CXX = nc++
 SILENT = -fdiag-vector=0 -fdiag-parallel=0 -fdiag-inline=0
 
 # Debugging (using -g and -traceback makes gdb segfault!)
-#DBG = -traceback=verbose
+# DBG = -traceback=verbose
 
-# test_tlr segfaults at runtime if we compile the library and the executables with the first two options only!
-# It is fine if added as extra flags when compiling the example only
-# e.g. make test_tlr CXXFLAGS="-finline-functions -finline-max-depth=5"
-# Adding the third and fourth options prevent segfaults
-OPT = -finline-functions -finline-max-depth=5 -fno-defer-inline-template-instantiation -fnamed-alias
+# Default optimization level -02 is buggy (as of 3.2.1)
+OPT = -O1 -finline
 
-# difference between 02 and 01 Compiler flags
-# these are the 02 flags
-#-fassociative-math                       : enable
-#-fcheck-noexcept-violation               : disable
-#-floop-unroll                            : enable
-#-fnamed-alias                            : disable
-#-fnamed-noalias                          : enable
-#-freciprocal-math                        : enable
-#-fstrict-aliasing                        : enable
-#-fthis-pointer-alias                     : disable
-#-fthis-pointer-noalias                   : enable
-#-mvector-dependency-test                 : enable
-#-mvector-fma                             : enable
-
-# OPT += -mno-vector-dependency-test
-# OPT += -fthis-pointer-alias
-# OPT += -fnamed-alias
-
-CXXFLAGS = -fPIC -Wall $(SILENT) -static-nec $(REP) $(TRACE) -fopenmp -O2 $(OPT) $(DBG) -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED -mschedule-runtime
+CXXFLAGS = -fPIC -Wall -static-nec $(SILENT) $(REP) $(TRACE) -fopenmp $(OPT) $(DBG) -std=c++14 -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
-LDFLAGS = -static-nec $(TRACE) -ldl -lpthread -lm -fopenmp
+LDFLAGS = $(TRACE) -static-nec -ldl -lm -fopenmp
+# NEC MPI wrappers (as of version 2.15.0) explicitly list libmpi.a when linking and not -lmpi
+ifneq ($(NMPI_ROOT),)
+  MPI_LIBDIR = $(NMPI_ROOT)/lib64/ve
+  LDFLAGS += -Wl,-rpath,$(MPI_LIBDIR) -L$(MPI_LIBDIR) -lmpi -lmpi_mem -lsysve -lrt -ldl -lc
+  SL = nc++
+endif
 
 # To link against GSL in examples/ns
 LDFLAGS += -lcblas -lblas_sequential -lncc
