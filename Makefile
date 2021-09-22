@@ -24,15 +24,24 @@ $(LIBH2OPUSVARS): $(H2OPUS_DIR)/make.inc | $(H2OPUS_DIR)/lib/h2opus/.keep
 -include make.inc
 -include $(LIBH2OPUSVARS)
 
+UNAME_S := $(shell uname -s)
+
 # Archiver and shared linker default options
 AR_SUFFIX ?= a
 AR ?= ar
 AR_FLAGS ?= -cr
 RANLIB ?= ranlib
 
-SL_SUFFIX ?= so
 SL ?= $(CXX)
-SL_FLAGS ?= -fPIC -shared
+ifeq ($(UNAME_S),Darwin)
+  SL_SUFFIX ?= dylib
+  SL_FLAGS ?= -dynamiclib -single_module -undefined dynamic_lookup -multiply_defined suppress
+  SL_SUFFIX ?= so
+  DSYMUTIL = /usr/bin/dsymutil
+else
+  SL_SUFFIX ?= so
+  SL_FLAGS ?= -fPIC -shared
+endif
 SL_LINK_FLAG ?= -Wl,-rpath,
 
 override LIBH2OPUS_static := $(H2OPUS_DIR)/lib/libh2opus.$(AR_SUFFIX)
@@ -138,7 +147,7 @@ config: config-clean
 
 clean:
 	@rm -rf $(OBJ_DIR)/*
-	@rm -f $(H2OPUS_DIR)/lib/libh2opus.*
+	@rm -rf $(H2OPUS_DIR)/lib/libh2opus.*
 	@rm -rf $(H2OPUS_DIR)/h2opus.scanbuild
 
 config-clean : clean

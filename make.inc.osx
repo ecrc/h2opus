@@ -1,0 +1,9 @@
+# OSX example configuration
+
+CXX = clang++
+CXXFLAGS =  -Wall -O2  -fPIC -std=c++14 
+CXXCPPFLAGS =  -DH2OPUS_FMANGLE_NOCHANGE -DH2OPUS_PROFILING_ENABLED 
+CXXCPPFLAGS += -I$(THRUST_DIR)/include
+
+# Blas from Accelerate framework
+BLAS_LIBS = -llapack -lblas
