@@ -24,7 +24,7 @@ CXX ?= g++
 CXXFLAGS = -Wall -fPIC -fopenmp -O3 -std=c++14 -pthread -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
-LDFLAGS = -ldl -lpthread -lm -fopenmp
+LDFLAGS = -lstdc++ -ldl -lpthread -lm -fopenmp
 
 # special math headers and linking line
 ifneq ($(MKLROOT),)

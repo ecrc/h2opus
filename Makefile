@@ -139,7 +139,7 @@ config: config-clean
 clean:
 	@rm -rf $(OBJ_DIR)/*
 	@rm -f $(H2OPUS_DIR)/lib/libh2opus.*
-	@rm -rf h2opus.scanbuild
+	@rm -rf $(H2OPUS_DIR)/h2opus.scanbuild
 
 config-clean : clean
 	@rm -f $(LIBH2OPUSVARS)
@@ -299,4 +299,4 @@ format:
 
 scanbuild:
 	@$(MAKE) distclean
-	@$(SCAN_BUILD) -v --force-analyze-debug-code -enable-checker optin.mpi.MPI-Checker -o h2opus.scanbuild sh -c 'export OMPI_CXX=$${CXX}; export MPICH_CXX=$${CXX}; make; make check'
+	@$(SCAN_BUILD) -v --force-analyze-debug-code -enable-checker optin.mpi.MPI-Checker -o $(H2OPUS_DIR)/h2opus.scanbuild sh -c 'export OMPI_CXX=$${CXX}; export MPICH_CXX=$${CXX}; make; make check'
