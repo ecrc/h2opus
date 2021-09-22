@@ -152,8 +152,6 @@ distclean: config-clean
 ############################################################################
 # Main library compilation
 ############################################################################
-H2OPUS_LIBS := $(KBLAS_LIBS) $(MAGMA_LIBS) $(BLAS_LIBS) $(CUDA_LIBS) $(LDFLAGS)
-
 H2OPUS_SRC_DIRS := src/core src/util
 H2OPUS_INC_DIRS := include include/h2opus/core include/h2opus/core/tlr include/h2opus/util include/h2opus/marshal
 ifneq ($(H2OPUS_USE_GPU),)
@@ -214,9 +212,12 @@ H2OPUS_EXAMPLE_INC_LIST := $(wildcard $(addsuffix /*.h, $(H2OPUS_EXAMPLE_DIRS)))
 # Keep PETSc examples formatted PETSc-style
 H2OPUS_EXAMPLE_SRC_LIST := $(filter-out examples/fd/test_fd_petsc.cpp,$(H2OPUS_EXAMPLE_SRC_LIST))
 
+H2OPUS_LIBS := $(KBLAS_LIBS) $(MAGMA_LIBS) $(BLAS_LIBS) $(CUDA_LIBS) $(LDFLAGS)
+
 H2OPUS_CXX ?= $(HCXX)
 H2OPUS_CXXFLAGS ?= $(HCXXFLAGS)
 H2OPUS_CXXCPP ?= $(H2OPUS_INCLUDE) $(CXXCPPFLAGS) $(INCLUDES)
+H2OPUS_CXXCPPI ?= $(H2OPUS_INCLUDEI) $(CXXCPPFLAGS) $(INCLUDES)
 H2OPUS_LINKER ?= $(SL)
 H2OPUS_FULL_LIBS ?= $(SL_LINK_FLAG)$(H2OPUS_DIR)/lib -L$(H2OPUS_DIR)/lib -lh2opus $(H2OPUS_LIBS)
 H2OPUS_FULL_LIBSI ?= $(SL_LINK_FLAG)$(H2OPUS_INSTALL_DIR)/lib -L$(H2OPUS_INSTALL_DIR)/lib -lh2opus $(H2OPUS_LIBS)
@@ -280,7 +281,7 @@ install: lib
 	@printf "# H2OPUS makefile variables\n" > $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_CXX = $(H2OPUS_CXX)\n" >> $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_CXXFLAGS = $(H2OPUS_CXXFLAGS)\n" >> $(LIBH2OPUSVARSI)
-	@printf "H2OPUS_CXXCPP = $(H2OPUS_CXXCPP)\n" >> $(LIBH2OPUSVARSI)
+	@printf "H2OPUS_CXXCPP = $(H2OPUS_CXXCPPI)\n" >> $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_LINKER = $(H2OPUS_LINKER)\n" >> $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_LIBS = $(H2OPUS_FULL_LIBSI)\n" >> $(LIBH2OPUSVARSI)
 
