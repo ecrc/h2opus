@@ -5,23 +5,6 @@
 #include <h2opus/core/h2opus_handle.h>
 #include <h2opus/distributed/distributed_comm_buffer.h>
 
-// Prevent CXX namespace to pollute libraries using H2OPUS
-#if !defined(MPICH_SKIP_MPICXX)
-#define H2OPUS_UNDEF_SKIP_MPICH 1
-#define MPICH_SKIP_MPICXX 1
-#endif
-#if !defined(OMPI_SKIP_MPICXX)
-#define H2OPUS_UNDEF_SKIP_OMPI 1
-#define OMPI_SKIP_MPICXX 1
-#endif
-#include <mpi.h>
-#if defined(H2OPUS_UNDEF_SKIP_MPICH)
-#undef OMPI_MPICH_MPICXX
-#endif
-#if defined(H2OPUS_UNDEF_SKIP_OMPI)
-#undef OMPI_SKIP_MPICXX
-#endif
-
 struct DistributedH2OpusHandle
 {
   public:
