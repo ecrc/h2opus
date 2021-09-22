@@ -12,7 +12,7 @@ CXXCPPFLAGS = -DTHRUST_IGNORE_DEPRECATED_CPP_DIALECT
 CXXFLAGS = -qPIC -qmaxmem=-1 -Wall -qsmp=omp -O2 -std=c++14 -DH2OPUS_PROFILING_ENABLED
 
 # Linker flags
-LDFLAGS = -qsmp=omp
+LDFLAGS = -qsmp=omp -lstdc++ -libmc++
 
 # Shared linker flags
 SL_FLAGS = -qmkshrobj -qPIC
