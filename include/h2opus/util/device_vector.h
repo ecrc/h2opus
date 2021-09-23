@@ -11,7 +11,7 @@
 
 #ifndef H2OPUS_USE_CUDA_VMM
 #ifdef CUDA_VERSION
-#if (CUDA_VERSION == 10020 || CUDA_VERSION > 10020)
+#if (CUDA_VERSION > 10999)
 #define H2OPUS_USE_CUDA_VMM
 #endif
 #endif
