@@ -2,6 +2,7 @@ obj/*
 lib/*
 *.eps
 *~
+pkg.gitcommit
 make.inc
 h2opus.scanbuild/
 include/h2opusconf.h

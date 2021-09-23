@@ -10,11 +10,7 @@
 #define H2OPUS_UNDEF_SKIP_OMPI 1
 #define OMPI_SKIP_MPICXX 1
 #endif
-#if defined(PETSC_HAVE_MPIUNI)
-#include <petsc/mpiuni/mpi.h>
-#else
 #include <mpi.h>
-#endif
 #if defined(H2OPUS_UNDEF_SKIP_MPICH)
 #undef OMPI_MPICH_MPICXX
 #endif
