@@ -146,7 +146,7 @@ int main(int argc, char **argv)
     // Generate random input for the hgemv
     thrust::host_vector<H2Opus_Real> x(n * num_vectors, 1), y(n * num_vectors, 0);
     for (size_t i = 0; i < x.size(); i++)
-        x[i] = (H2Opus_Real)rand() / RAND_MAX;
+        x[i] = (H2Opus_Real)rand() / (RAND_MAX + 1.0);
 
     // Create a functor that can generate the matrix entries from two points
     FDGen<H2Opus_Real> func_gen(dim, pt_cloud.h);
