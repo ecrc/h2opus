@@ -36,11 +36,13 @@ SL ?= $(CXX)
 ifeq ($(UNAME_S),Darwin)
   SL_SUFFIX ?= dylib
   SL_FLAGS ?= -dynamiclib -single_module -undefined dynamic_lookup -multiply_defined suppress
-  SL_SUFFIX ?= so
   DSYMUTIL = /usr/bin/dsymutil
+  INSTALL_NAME_TOOL = install_name_tool
 else
   SL_SUFFIX ?= so
   SL_FLAGS ?= -fPIC -shared
+  DSYMUTIL = true
+  INSTALL_NAME_TOOL = true
 endif
 SL_LINK_FLAG ?= -Wl,-rpath,
 
@@ -261,9 +263,7 @@ $(LIBH2OPUS_static): $(H2OPUS_OBJ_LIST)
 
 $(LIBH2OPUS_shared): $(H2OPUS_OBJ_LIST)
 	$(SL) $(SL_FLAGS) -o $(LIBH2OPUS_shared) $(H2OPUS_OBJ_LIST) $(H2OPUS_LIBS)
-ifneq ($(DSYMUTIL),)
 	$(DSYMUTIL) $@
-endif
 
 lib: $(LIBH2OPUS) $(config-confheader)
 
@@ -287,6 +287,7 @@ install: lib
 	mkdir -p $(H2OPUS_INSTALL_DIR)/lib/h2opus
 	cp -r include/* $(H2OPUS_INSTALL_DIR)/include
 	cp $(LIBH2OPUS) $(H2OPUS_INSTALL_DIR)/lib
+	$(INSTALL_NAME_TOOL) -id $(LIBH2OPUSI_shared) $(LIBH2OPUSI_shared)
 	@printf "# H2OPUS makefile variables\n" > $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_CXX = $(H2OPUS_CXX)\n" >> $(LIBH2OPUSVARSI)
 	@printf "H2OPUS_CXXFLAGS = $(H2OPUS_CXXFLAGS)\n" >> $(LIBH2OPUSVARSI)
