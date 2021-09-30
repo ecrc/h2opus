@@ -71,6 +71,10 @@ ifeq ($(H2OPUS_USE_GPU),)
 else
 	@echo "  With GPU backend"
 	$(call write-confheader-define,$@,USE_GPU)
+ifneq ($(H2OPUS_USE_GPU_VMM),)
+	@echo "  With GPU VMM"
+	$(call write-confheader-define,$@,USE_GPU_VMM)
+endif
 endif
 ifneq ($(H2OPUS_USE_MKL),)
 	@echo "  With MKL support"
@@ -269,16 +273,9 @@ lib: $(LIBH2OPUS) $(config-confheader)
 
 .PHONY: lib
 
+unexport CXXFLAGS
 check: $(LIBH2OPUS)
-	@echo "Compiling examples to verify the library"
-	@(cd $(H2OPUS_DIR)/examples/hara && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/hgemv && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/hcompress && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/hlru && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/horthog && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/tlr && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/fd && make clean && make)
-	@(cd $(H2OPUS_DIR)/examples/ns && make clean && make)
+	@$(MAKE) -C examples
 
 .PHONY: check
 

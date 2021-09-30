@@ -8,22 +8,13 @@
 #include <h2opusconf.h>
 #if defined(H2OPUS_USE_GPU)
 #include <cuda.h>
-
-#ifndef H2OPUS_USE_CUDA_VMM
-#ifdef CUDA_VERSION
-#if (CUDA_VERSION > 10999)
-#define H2OPUS_USE_CUDA_VMM
-#endif
-#endif
-#endif
-
 #include <h2opus/core/h2opus_handle.h>
 #include <h2opus/util/gpu_err_check.h>
 
 template <class T> struct H2OpusDeviceVector
 {
   private:
-#ifdef H2OPUS_USE_CUDA_VMM
+#ifdef H2OPUS_USE_GPU_VMM
     size_t memory_allocation_size, allocation_granularity;
     CUmemGenericAllocationHandle allocation_handle;
     CUmemAllocationProp allocation_properties;
@@ -36,7 +27,7 @@ template <class T> struct H2OpusDeviceVector
 
     void init()
     {
-#ifdef H2OPUS_USE_CUDA_VMM
+#ifdef H2OPUS_USE_GPU_VMM
         int device_id;
         gpuErrchk(cudaGetDevice(&device_id));
 
@@ -59,7 +50,7 @@ template <class T> struct H2OpusDeviceVector
 
     void freeMemory()
     {
-#ifdef H2OPUS_USE_CUDA_VMM
+#ifdef H2OPUS_USE_GPU_VMM
         if (device_ptr != 0 && memory_allocation_size != 0)
         {
             gpuErrchk(cudaDeviceSynchronize());
@@ -83,7 +74,7 @@ template <class T> struct H2OpusDeviceVector
         std::swap(this->vector_data, A.vector_data);
         std::swap(this->allocated_entries, A.allocated_entries);
         std::swap(this->entries_capacity, A.entries_capacity);
-#ifdef H2OPUS_USE_CUDA_VMM
+#ifdef H2OPUS_USE_GPU_VMM
         std::swap(this->memory_allocation_size, A.memory_allocation_size);
         std::swap(this->allocation_granularity, A.allocation_granularity);
         std::swap(this->allocation_handle, A.allocation_handle);
@@ -180,7 +171,7 @@ template <class T> struct H2OpusDeviceVector
 
         size_t bytes = array_size * sizeof(T);
 
-#ifdef H2OPUS_USE_CUDA_VMM
+#ifdef H2OPUS_USE_GPU_VMM
         // align memory size to granularity
         memory_allocation_size =
             ((bytes + allocation_granularity - 1) / allocation_granularity) * allocation_granularity;

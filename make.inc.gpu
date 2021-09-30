@@ -10,6 +10,8 @@ H2OPUS_USE_GPU = 1
 # we specify include folder and linking line
 ifneq ($(CUDA_DIR),)
   CUDA_INCDIR = $(CUDA_DIR)/include
+  # comment out if you are using a version of CUDA < 10.2
+  H2OPUS_USE_GPU_VMM = 1
   CUDA_LIBS = -Wl,-rpath,$(CUDA_DIR)/lib64 -L$(CUDA_DIR)/lib64 -lcuda -lcudart -lcublas -lcusparse -lcurand
   NVCC = $(CUDA_DIR)/bin/nvcc
 endif
