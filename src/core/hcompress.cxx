@@ -41,10 +41,9 @@ int hcompress_compressed_basis_leaf_rank_template(TBasisTree<hw> &basis_tree, H2
     // Clear UZ_data
     fillArray(UZ_data, num_leaves * leaf_size * leaf_rank, 0, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, Z_TRANS_MODE_1, leaf_size,
-                                                             leaf_rank, leaf_rank, alpha, (const H2Opus_Real **)ptr_U,
-                                                             leaf_size, (const H2Opus_Real **)ptr_Z, leaf_rank, beta,
-                                                             ptr_UZ, leaf_size, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, Z_TRANS_MODE_1, leaf_size, leaf_rank, leaf_rank, alpha, (const H2Opus_Real **)ptr_U,
+        leaf_size, (const H2Opus_Real **)ptr_Z, leaf_rank, beta, ptr_UZ, leaf_size, num_leaves));
 
     // Calculate a basis Q for the approximation of UZ using column pivoted QR
     // UZ is overwritten by Q
@@ -89,10 +88,9 @@ void hcompress_truncate_basis_leaves_template(TBasisTree<hw> &basis_tree, int ne
     fillArray(T_hat_leaves, leaf_rank * leaf_rank * num_leaves, 0, stream, hw);
     generateArrayOfPointers(T_hat_leaves, ptr_T, leaf_rank * leaf_rank, num_leaves, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, max_rank, leaf_rank,
-                                                             leaf_size, alpha, (const H2Opus_Real **)ptr_UZ, leaf_size,
-                                                             (const H2Opus_Real **)ptr_U, leaf_size, beta, ptr_T,
-                                                             leaf_rank, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_Trans, H2Opus_NoTrans, max_rank, leaf_rank, leaf_size, alpha, (const H2Opus_Real **)ptr_UZ,
+        leaf_size, (const H2Opus_Real **)ptr_U, leaf_size, beta, ptr_T, leaf_rank, num_leaves));
 
     // Now copy over the truncated leaf data
     basis_tree.basis_mem.resize(num_leaves * leaf_size * new_rank);
@@ -155,11 +153,10 @@ int hcompress_compressed_basis_level_rank_template(TBasisTree<hw> &basis_tree, H
                                                      basis_tree.head_ptr(), basis_tree.next_ptr(), num_nodes, stream);
 
     // Now execute the batch gemm
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, child_new_rank,
-                                                             level_rank, child_rank, alpha,
-                                                             (const H2Opus_Real **)workspace.ptr_A, child_rank,
-                                                             (const H2Opus_Real **)workspace.ptr_B, child_rank, beta,
-                                                             workspace.ptr_C, te_rows, num_child_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_NoTrans, child_new_rank, level_rank, child_rank, alpha,
+        (const H2Opus_Real **)workspace.ptr_A, child_rank, (const H2Opus_Real **)workspace.ptr_B, child_rank, beta,
+        workspace.ptr_C, te_rows, num_child_nodes));
 
     ////////////////////////////////////////////////////////////////
     // Apply the weights of each basis node to the stacked TE nodes - ie UZ = TE * Z'
@@ -169,10 +166,9 @@ int hcompress_compressed_basis_level_rank_template(TBasisTree<hw> &basis_tree, H
     generateArrayOfPointers(Z_hat_level, ptr_Z, level_rank * level_rank, num_nodes, stream, hw);
     generateArrayOfPointers(UZ_data, ptr_UZ, te_rows * level_rank, num_nodes, stream, hw);
 
-    check_kblas_error((
-        H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, Z_TRANS_MODE_1, te_rows, level_rank, level_rank,
-                                              alpha, (const H2Opus_Real **)ptr_TE, te_rows, (const H2Opus_Real **)ptr_Z,
-                                              level_rank, beta, ptr_UZ, te_rows, num_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, Z_TRANS_MODE_1, te_rows, level_rank, level_rank, alpha, (const H2Opus_Real **)ptr_TE,
+        te_rows, (const H2Opus_Real **)ptr_Z, level_rank, beta, ptr_UZ, te_rows, num_nodes));
 
     // Get new approximate basis Q for UZ - overwrites UZ
     H2Opus_Real *tau_data = workspace.tau_data, **ptr_tau = workspace.ptr_D;
@@ -228,10 +224,9 @@ void hcompress_truncate_basis_level_template(TBasisTree<hw> &basis_tree, int new
     H2Opus_Real **T_ptrs = workspace.ptr_D;
     generateArrayOfPointers(T_hat_level, T_ptrs, level_rank * level_rank, num_nodes, stream, hw);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, new_rank, level_rank,
-                                                             te_rows, alpha, (const H2Opus_Real **)ptr_UZ, te_rows,
-                                                             (const H2Opus_Real **)ptr_TE, te_rows, beta, T_ptrs,
-                                                             level_rank, num_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_Trans, H2Opus_NoTrans, new_rank, level_rank, te_rows, alpha, (const H2Opus_Real **)ptr_UZ,
+        te_rows, (const H2Opus_Real **)ptr_TE, te_rows, beta, T_ptrs, level_rank, num_nodes));
 
     ////////////////////////////////////////////////////////////////
     // Resize original array and copy over the truncated transfer matrices
@@ -247,9 +242,8 @@ void hcompress_truncate_basis_level_template(TBasisTree<hw> &basis_tree, int new
         max_children, basis_tree.head_ptr(), basis_tree.next_ptr(), num_nodes, stream);
 
     // ...and then copy
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, child_new_rank, new_rank, ptr_E, 0, 0,
-                                                                  child_new_rank, ptr_UZ, 0, 0, te_rows,
-                                                                  num_child_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
+        stream, child_new_rank, new_rank, ptr_E, 0, 0, child_new_rank, ptr_UZ, 0, 0, te_rows, num_child_nodes));
 
     workspace.new_ranks[level] = new_rank;
 }
@@ -448,11 +442,10 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
                 ptr_ZE, stacked_node_data, ptr_Z, Z_hat_parent_level, ptr_E, transfer_level, basis_tree.parent_ptr(),
                 parent_level_start, level_start, start_index, ld_ZE, parent_rank, level_rank, batch_size, stream);
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, Z_TRANS_MODE_2, H2Opus_Trans, parent_rank,
-                                                                     level_rank, parent_rank, (H2Opus_Real)1,
-                                                                     (const H2Opus_Real **)ptr_Z, parent_rank,
-                                                                     (const H2Opus_Real **)ptr_E, level_rank,
-                                                                     (H2Opus_Real)0, ptr_ZE, ld_ZE, batch_size));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+                stream, Z_TRANS_MODE_2, H2Opus_Trans, parent_rank, level_rank, parent_rank, (H2Opus_Real)1,
+                (const H2Opus_Real **)ptr_Z, parent_rank, (const H2Opus_Real **)ptr_E, level_rank, (H2Opus_Real)0,
+                ptr_ZE, ld_ZE, batch_size));
 
             // The blocks after that are the transpose of the coupling matrices within a block row
             // First marshal the coupling nodes for each row
@@ -489,9 +482,8 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
 
             if (direction == BSN_DIRECTION_ROW)
             {
-                check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::transpose)(stream, level_rank, level_rank, ptr_S,
-                                                                              level_rank, ptr_row_data, ld_ZE,
-                                                                              total_coupling_blocks));
+                check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::transpose)(
+                    stream, level_rank, level_rank, ptr_S, level_rank, ptr_row_data, ld_ZE, total_coupling_blocks));
             }
             else
             {
@@ -509,13 +501,11 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
             generateArrayOfPointers(Z_hat_level, Z_hat_ptrs, level_rank * level_rank, batch_size, stream, hw);
 
             // I tried syrk, but for these sizes it seems gemm is faster
-            check_kblas_error(
-                (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, stacked_node_col,
-                                                       stacked_node_col, stacked_node_row, level_rank, level_rank,
-                                                       ld_ZE, (H2Opus_Real)1, (const H2Opus_Real **)stacked_node_ptrs,
-                                                       stacked_node_ld, (const H2Opus_Real **)stacked_node_ptrs,
-                                                       stacked_node_ld, (H2Opus_Real)0, Z_hat_ptrs, stacked_node_col,
-                                                       batch_size));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+                stream, H2Opus_Trans, H2Opus_NoTrans, stacked_node_col, stacked_node_col, stacked_node_row, level_rank,
+                level_rank, ld_ZE, (H2Opus_Real)1, (const H2Opus_Real **)stacked_node_ptrs, stacked_node_ld,
+                (const H2Opus_Real **)stacked_node_ptrs, stacked_node_ld, (H2Opus_Real)0, Z_hat_ptrs, stacked_node_col,
+                batch_size));
 
             // Compute the special cholesky factor for rank deficient matrices
             check_kblas_error(
@@ -525,10 +515,9 @@ void hcompress_generate_optimal_basis_template(THNodeTree<hw> &hnodes, THNodeTre
                                                                       level_rank, stacked_node_ptrs, stacked_node_ld,
                                                                       stacked_node_tau_ptrs, batch_size));
 
-            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(stream, ld_ZE, level_rank, stacked_node_data,
-                                                                           ld_ZE, ld_ZE * level_rank, Z_hat_level,
-                                                                           level_rank, level_rank * level_rank,
-                                                                           batch_size));
+            check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(
+                stream, ld_ZE, level_rank, stacked_node_data, ld_ZE, ld_ZE * level_rank, Z_hat_level, level_rank,
+                level_rank * level_rank, batch_size));
 #endif
             start_index += batch_size;
             Z_hat_level += batch_size * level_rank * level_rank;
@@ -572,11 +561,10 @@ void hcompress_project_top_level(TBasisTree<hw> &basis_tree, HcompressUpsweepWor
 
     H2Opus_Real alpha = 1, beta = 0;
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans,
-                                                             level_truncated_rank, parent_rank, level_rank, alpha,
-                                                             (const H2Opus_Real **)T_ptrs, level_rank,
-                                                             (const H2Opus_Real **)E_ptrs, level_rank, beta, TE_ptrs,
-                                                             level_truncated_rank, num_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_NoTrans, level_truncated_rank, parent_rank, level_rank, alpha,
+        (const H2Opus_Real **)T_ptrs, level_rank, (const H2Opus_Real **)E_ptrs, level_rank, beta, TE_ptrs,
+        level_truncated_rank, num_nodes));
 
     // The basis is now completely nested again
     level_data.nested_root_level = 0;
@@ -630,11 +618,10 @@ void hcompress_project_level_template(THNodeTree<hw> &hnodes, int level, size_t 
                                                          level_nodes, stream);
 
         // First calculate TC_{ts} = Tu_{t} C_{ts}
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans,
-                                                                 projection_rank, level_rank, level_rank, alpha,
-                                                                 (const H2Opus_Real **)Tu_array, ld_tu,
-                                                                 (const H2Opus_Real **)C_array, level_rank, beta,
-                                                                 TC_array, projection_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, projection_rank, level_rank, level_rank, alpha,
+            (const H2Opus_Real **)Tu_array, ld_tu, (const H2Opus_Real **)C_array, level_rank, beta, TC_array,
+            projection_rank, level_nodes));
     }
 
     // Now we can resize the coupling matrix data to hold the new projected nodes
@@ -647,11 +634,10 @@ void hcompress_project_level_template(THNodeTree<hw> &hnodes, int level, size_t 
         generateArrayOfPointers(C_level, C_array, projection_rank * projection_rank, level_nodes, stream, hw);
 
         // Now calculate C_{ts} = TC_{ts} * Pv_{t}^t
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, projection_rank,
-                                                                 projection_rank, level_rank, alpha,
-                                                                 (const H2Opus_Real **)TC_array, projection_rank,
-                                                                 (const H2Opus_Real **)Tv_array, ld_tv, beta, C_array,
-                                                                 projection_rank, level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_Trans, projection_rank, projection_rank, level_rank, alpha,
+            (const H2Opus_Real **)TC_array, projection_rank, (const H2Opus_Real **)Tv_array, ld_tv, beta, C_array,
+            projection_rank, level_nodes));
     }
 }
 

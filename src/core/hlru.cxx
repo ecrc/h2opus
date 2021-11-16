@@ -105,10 +105,9 @@ void hlru_update_coupling_matrices(THNodeTree<hw> &hnodes, int update_level, int
         generateArrayOfPointers(vec_ptr(hnodes.rank_leaf_mem[level]), vec_ptr(new_node_ptrs), new_rank * new_rank,
                                 level_nodes, stream, hw);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, level_rank, level_rank,
-                                                                      vec_ptr(new_node_ptrs), 0, 0, new_rank,
-                                                                      vec_ptr(original_node_ptrs), 0, 0, level_rank,
-                                                                      level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
+            stream, level_rank, level_rank, vec_ptr(new_node_ptrs), 0, 0, new_rank, vec_ptr(original_node_ptrs), 0, 0,
+            level_rank, level_nodes));
 
         // Now we need to reduce the pointer array to include just the flagged hnodes
         int flagged_nodes = hlru_flagged_coupling_marshal_batch<H2Opus_Real, hw>(
@@ -171,10 +170,9 @@ void hlru_update_basis_leaves(TBasisTree<hw> &basis_tree, H2Opus_Real **basis_up
         update_rank, leaf_start, num_leaves, stream);
 
     // Copy over the flagged blocks
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, vec_ptr(rows_array), vec_ptr(cols_array),
-                                                                  leaf_size, update_rank, vec_ptr(flagged_dest_ptrs),
-                                                                  vec_ptr(ld_dest_array), vec_ptr(flagged_origin_ptrs),
-                                                                  vec_ptr(ld_src_array), flagged_nodes));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
+        stream, vec_ptr(rows_array), vec_ptr(cols_array), leaf_size, update_rank, vec_ptr(flagged_dest_ptrs),
+        vec_ptr(ld_dest_array), vec_ptr(flagged_origin_ptrs), vec_ptr(ld_src_array), flagged_nodes));
 }
 
 template <int hw>
@@ -216,9 +214,8 @@ void hlru_update_transfer_matrices(TBasisTree<hw> &basis_tree, int rank, int upd
         generateArrayOfPointers(vec_ptr(basis_tree.trans_mem[level]), vec_ptr(dest_ptrs), new_rows * new_cols,
                                 level_nodes, stream, hw);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, rows, cols, vec_ptr(dest_ptrs), 0, 0,
-                                                                      new_rows, vec_ptr(origin_ptrs), 0, 0, rows,
-                                                                      level_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
+            stream, rows, cols, vec_ptr(dest_ptrs), 0, 0, new_rows, vec_ptr(origin_ptrs), 0, 0, rows, level_nodes));
 
         // Set the lower right block to the identity matrix
         if (level != update_level)
@@ -263,13 +260,11 @@ void hlru_update_dense_blocks(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_basis_tr
         basis_update_col, hnode_update_index, num_dense_leaves, stream);
 
     // M += U * V^T
-    check_kblas_error(
-        (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array),
-                                               vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim, dense_dim, rank,
-                                               (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(flagged_u_ptrs),
-                                               vec_ptr(ldu_array), (const H2Opus_Real **)vec_ptr(flagged_v_ptrs),
-                                               vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(flagged_m_ptrs),
-                                               vec_ptr(ldm_array), flagged_blocks));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array), vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim,
+        dense_dim, rank, (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(flagged_u_ptrs), vec_ptr(ldu_array),
+        (const H2Opus_Real **)vec_ptr(flagged_v_ptrs), vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(flagged_m_ptrs),
+        vec_ptr(ldm_array), flagged_blocks));
 }
 
 template <int hw> void hlru_init_temp_data(THMatrix<hw> &hmatrix, TLowRankUpdate<hw> &update)

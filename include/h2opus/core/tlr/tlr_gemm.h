@@ -22,10 +22,9 @@ void tlr_gemm_diagonal(T alpha, TTLR_Matrix<T, hw> &A, TTLR_Matrix<T, hw> &B, T 
     int *bs_batch = workspace.dense_bs_batch;
     int *max_rank_batch = workspace.dense_max_rank_batch;
 
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, bs_batch, bs_batch,
-                                                   block_size, block_size, block_size, alpha, (const T **)A_diag,
-                                                   bs_batch, (const T **)B_diag, bs_batch, beta, C_diag, bs_batch,
-                                                   n_block));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, bs_batch, bs_batch, block_size, block_size, block_size, alpha,
+        (const T **)A_diag, bs_batch, (const T **)B_diag, bs_batch, beta, C_diag, bs_batch, n_block));
 
     // Now expand the low rank products in three steps:
     // C_ij += A_ik B_kj = Ua_ik (Va^T_ik Ub_kj) Vb^T_kj = Ua_ik (T1 Vb^T_kj) = Ua_ik T2^T
@@ -46,10 +45,9 @@ void tlr_gemm_diagonal(T alpha, TTLR_Matrix<T, hw> &A, TTLR_Matrix<T, hw> &B, T 
         int max_b_rank = getMaxElement(b_ranks, n_block, stream, hw);
 
         // T1 = Va^T_ik Ub_kj
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, a_ranks, b_ranks, bs_batch,
-                                                       max_a_rank, max_b_rank, block_size, alpha, (const T **)Va_ptrs,
-                                                       bs_batch, (const T **)Ub_ptrs, bs_batch, (T)0, T1_buffers,
-                                                       max_rank_batch, n_block));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_Trans, H2Opus_NoTrans, a_ranks, b_ranks, bs_batch, max_a_rank, max_b_rank, block_size, alpha,
+            (const T **)Va_ptrs, bs_batch, (const T **)Ub_ptrs, bs_batch, (T)0, T1_buffers, max_rank_batch, n_block));
 
         // T2 = Vb_kj T1^T
         check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, bs_batch, a_ranks, b_ranks,
@@ -58,10 +56,9 @@ void tlr_gemm_diagonal(T alpha, TTLR_Matrix<T, hw> &A, TTLR_Matrix<T, hw> &B, T 
                                                        T2_buffers, bs_batch, n_block));
 
         // C += Ua_ik T2^T
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, bs_batch, bs_batch,
-                                                       a_ranks, block_size, block_size, max_a_rank, 1,
-                                                       (const T **)Ua_ptrs, bs_batch, (const T **)T2_buffers, bs_batch,
-                                                       (T)1, C_diag, bs_batch, n_block));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_Trans, bs_batch, bs_batch, a_ranks, block_size, block_size, max_a_rank, 1,
+            (const T **)Ua_ptrs, bs_batch, (const T **)T2_buffers, bs_batch, (T)1, C_diag, bs_batch, n_block));
     }
 }
 
@@ -151,10 +148,9 @@ void tlr_gemm_sample_AB(T alpha, TTLR_Matrix<T, hw> &A, TTLR_Matrix<T, hw> &B, i
     // First we do A_ii * B_ij * R
     // T4 += A_ii B_ij * R = A_ii * Ub_ij * (Vb^T_ij * R) = A_ii * (Ub_ij * T1) = A_ii * T2
     // T1 = Vb^T_ij * R
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, rank_b_batch, tile_samples,
-                                                   bs_batch, max_rank_b, max_samples, block_size, (T)1,
-                                                   (const T **)Vb_ptrs, bs_batch, (const T **)input_ptrs, bs_batch, 0,
-                                                   T1_ptrs, max_rank_batch, num_tiles));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, H2Opus_Trans, H2Opus_NoTrans, rank_b_batch, tile_samples, bs_batch, max_rank_b, max_samples, block_size,
+        (T)1, (const T **)Vb_ptrs, bs_batch, (const T **)input_ptrs, bs_batch, 0, T1_ptrs, max_rank_batch, num_tiles));
     // T2 = Ub_ij * T1
     check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, tile_samples,
                                                    rank_b_batch, block_size, max_samples, max_rank_b, (T)1,
@@ -162,23 +158,20 @@ void tlr_gemm_sample_AB(T alpha, TTLR_Matrix<T, hw> &A, TTLR_Matrix<T, hw> &B, i
                                                    0, T2_ptrs, bs_batch, num_tiles));
 
     // T4 += A_ii * T2
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, trans_dense_A, H2Opus_NoTrans, bs_batch, tile_samples,
-                                                   bs_batch, block_size, max_samples, block_size, (T)1,
-                                                   (const T **)Da_ptrs, bs_batch, (const T **)T2_ptrs, bs_batch, (T)1,
-                                                   output_ptrs, bs_batch, num_tiles));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, trans_dense_A, H2Opus_NoTrans, bs_batch, tile_samples, bs_batch, block_size, max_samples, block_size,
+        (T)1, (const T **)Da_ptrs, bs_batch, (const T **)T2_ptrs, bs_batch, (T)1, output_ptrs, bs_batch, num_tiles));
 
     // Next we do A_ij * B_jj * R
     // T4 += A_ij * (B_jj * R) = Ua_ij * (Va^T_ij * T2) = Ua_ij * T3
     // T2 = B_jj * R
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, trans_dense_B, H2Opus_NoTrans, bs_batch, tile_samples,
-                                                   bs_batch, block_size, max_samples, block_size, (T)1,
-                                                   (const T **)Db_ptrs, bs_batch, (const T **)input_ptrs, bs_batch,
-                                                   (T)0, T2_ptrs, bs_batch, num_tiles));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, trans_dense_B, H2Opus_NoTrans, bs_batch, tile_samples, bs_batch, block_size, max_samples, block_size,
+        (T)1, (const T **)Db_ptrs, bs_batch, (const T **)input_ptrs, bs_batch, (T)0, T2_ptrs, bs_batch, num_tiles));
     // T3 = Va^T_ij * T2
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, rank_a_batch, tile_samples,
-                                                   bs_batch, max_rank_a, max_samples, block_size, (T)1,
-                                                   (const T **)Va_ptrs, bs_batch, (const T **)T2_ptrs, bs_batch, 0,
-                                                   T3_ptrs, max_rank_batch, num_tiles));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, H2Opus_Trans, H2Opus_NoTrans, rank_a_batch, tile_samples, bs_batch, max_rank_a, max_samples, block_size,
+        (T)1, (const T **)Va_ptrs, bs_batch, (const T **)T2_ptrs, bs_batch, 0, T3_ptrs, max_rank_batch, num_tiles));
 
     // T4 += Ua_ij * T3
     check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, tile_samples,

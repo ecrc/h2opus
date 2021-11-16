@@ -105,11 +105,10 @@ void tlr_potrf_sample_lru(TTLR_Matrix<T, hw> &A, int k, int *row_indices, int ro
                                                        bs_batch, 0, T1_ptrs, max_rank_batch, sample_block_count));
 
         // T2 = V_kj * T1
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch,
-                                                       samples_i_batch, rank_kj_batch, block_size, max_samples,
-                                                       max_rank_kj, (T)1, (const T **)Vkj_ptrs, bs_batch,
-                                                       (const T **)T1_ptrs, max_rank_batch, 0, T2_ptrs, bs_batch,
-                                                       sample_block_count));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, samples_i_batch, rank_kj_batch, block_size, max_samples,
+            max_rank_kj, (T)1, (const T **)Vkj_ptrs, bs_batch, (const T **)T1_ptrs, max_rank_batch, 0, T2_ptrs,
+            bs_batch, sample_block_count));
 
         // T3 = V_ij^T * T2
         check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, rank_ij_batch,
@@ -118,11 +117,10 @@ void tlr_potrf_sample_lru(TTLR_Matrix<T, hw> &A, int k, int *row_indices, int ro
                                                        bs_batch, 0, T3_ptrs, max_rank_batch, sample_block_count));
 
         // T4 += U_ij * T3
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch,
-                                                       samples_i_batch, rank_ij_batch, block_size, max_samples,
-                                                       max_rank_ij, (T)1, (const T **)Uij_ptrs, bs_batch,
-                                                       (const T **)T3_ptrs, max_rank_batch, T4_beta, T4_ptrs, bs_batch,
-                                                       sample_block_count));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, samples_i_batch, rank_ij_batch, block_size, max_samples,
+            max_rank_ij, (T)1, (const T **)Uij_ptrs, bs_batch, (const T **)T3_ptrs, max_rank_batch, T4_beta, T4_ptrs,
+            bs_batch, sample_block_count));
 
         sampled_block_cols += block_columns;
         T4_beta = 1;
@@ -834,10 +832,9 @@ void tlr_pstrf_update_dense_updates(TTLR_Matrix<T, hw> &A, int k, H2OpusTLRPotrf
                                                    (const T **)ptr_U, bs_batch, (const T **)ptr_G, max_rank_batch, 0,
                                                    ptr_T, bs_batch, num_updates));
 
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, bs_batch, bs_batch, rank_batch,
-                                                   block_size, block_size, max_subset_rank, (T)1, (const T **)ptr_T,
-                                                   bs_batch, (const T **)ptr_U, bs_batch, 1, ptr_D, bs_batch,
-                                                   num_updates));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_Trans, bs_batch, bs_batch, rank_batch, block_size, block_size, max_subset_rank,
+        (T)1, (const T **)ptr_T, bs_batch, (const T **)ptr_U, bs_batch, 1, ptr_D, bs_batch, num_updates));
 
     TLR_Potrf_Phase_Times<hw>::endPhase(TLR_Potrf_Phase_Types::DenseUpdate);
 }

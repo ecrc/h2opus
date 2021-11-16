@@ -431,11 +431,10 @@ void distributed_hgemv_denseMult_offDiag(H2Opus_Real alpha, TDistributedHNodeTre
         int batch_size = dense_batch_ptr[batch_id + 1] - dense_batch_ptr[batch_id];
         H2Opus_Real batch_beta = 1;
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, kblas_trans_mode, H2Opus_NoTrans, m_batch,
-                                                                 n_batch, k_batch, node_size, num_vectors, node_size,
-                                                                 alpha, (const H2Opus_Real **)A_batch, lda_batch,
-                                                                 (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
-                                                                 C_batch, ldc_batch, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, kblas_trans_mode, H2Opus_NoTrans, m_batch, n_batch, k_batch, node_size, num_vectors, node_size,
+            alpha, (const H2Opus_Real **)A_batch, lda_batch, (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
+            C_batch, ldc_batch, batch_size));
     }
 #ifdef H2OPUS_PROFILING_ENABLED
     HLibProfile::cumRun(HLibProfile::HGEMV_DENSE, PerformanceCounter::getOpCount(PerformanceCounter::GEMM),

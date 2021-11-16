@@ -72,18 +72,16 @@ void horthog_project_level_template(THNodeTree<hw> &hnodes, int level, size_t u_
         size_t batch_size = std::min(increment, level_nodes - start_index);
 
         // First calculate TS_{ts} = Tu_{t} S_{ts}
-        check_kblas_error(
-            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, level_rank,
-                                                   level_rank, alpha, (const H2Opus_Real **)Tu_array + start_index,
-                                                   level_new_rank, (const H2Opus_Real **)S_array + start_index,
-                                                   level_rank, beta, TS_array, level_new_rank, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, level_rank, level_rank, alpha,
+            (const H2Opus_Real **)Tu_array + start_index, level_new_rank, (const H2Opus_Real **)S_array + start_index,
+            level_rank, beta, TS_array, level_new_rank, batch_size));
 
         // Now calculate S_{ts} = TS_{ts} * Pv_{t}^t
-        check_kblas_error(
-            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_Trans, level_new_rank, level_new_rank,
-                                                   level_rank, alpha, (const H2Opus_Real **)TS_array, level_new_rank,
-                                                   (const H2Opus_Real **)Tv_array + start_index, level_new_rank, beta,
-                                                   S_new_array_ptr + start_index, level_new_rank, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_Trans, level_new_rank, level_new_rank, level_rank, alpha,
+            (const H2Opus_Real **)TS_array, level_new_rank, (const H2Opus_Real **)Tv_array + start_index,
+            level_new_rank, beta, S_new_array_ptr + start_index, level_new_rank, batch_size));
 
         start_index += batch_size;
     }
@@ -264,10 +262,9 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
     // Save the R factors from the leaves so that we can unpack the full Q
     H2Opus_Real *T_hat_leaf = T_hat[leaf_level];
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(stream, leaf_rows, leaf_rank, basis_leaves,
-                                                                   leaf_rows, leaf_rows * leaf_rank, T_hat_leaf,
-                                                                   leaf_new_rank, leaf_new_rank * leaf_rank,
-                                                                   num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copy_upper)(
+        stream, leaf_rows, leaf_rank, basis_leaves, leaf_rows, leaf_rows * leaf_rank, T_hat_leaf, leaf_new_rank,
+        leaf_new_rank * leaf_rank, num_leaves));
     // Now unpack the Q factor from the stored househoulder vectors
     check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::orgqr)(stream, leaf_rows, leaf_rank, basis_leaves, leaf_rows,
                                                               leaf_rows * leaf_rank, tau, leaf_rank, num_leaves));
@@ -277,10 +274,9 @@ void horthog_upsweep_leaves_template(TBasisTree<hw> &basis_tree, HorthogWorkspac
     {
         H2Opus_Real *truncated_leaves = vec_ptr(basis_tree.basis_mem);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(stream, leaf_rows, leaf_new_rank,
-                                                                      truncated_leaves, 0, 0, leaf_rows,
-                                                                      leaf_rows * leaf_new_rank, basis_leaves, 0, 0,
-                                                                      leaf_rows, leaf_rows * leaf_rank, num_leaves));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::copyBlock)(
+            stream, leaf_rows, leaf_new_rank, truncated_leaves, 0, 0, leaf_rows, leaf_rows * leaf_new_rank,
+            basis_leaves, 0, 0, leaf_rows, leaf_rows * leaf_rank, num_leaves));
     }
 }
 
@@ -325,11 +321,10 @@ void horthog_stitch_template(TBasisTree<hw> &basis_tree, HorthogWorkspace &works
         H2Opus_Real alpha = 1, beta = 0;
 
         // E = T * E
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank,
-                                                                 parent_rank, level_rank, alpha,
-                                                                 (const H2Opus_Real **)ptr_T, level_new_rank,
-                                                                 (const H2Opus_Real **)ptr_E, level_rank, beta, ptr_TE,
-                                                                 level_new_rank, num_nodes));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, level_new_rank, parent_rank, level_rank, alpha,
+            (const H2Opus_Real **)ptr_T, level_new_rank, (const H2Opus_Real **)ptr_E, level_rank, beta, ptr_TE,
+            level_new_rank, num_nodes));
     }
 
     // Copy over the ranks above the current top level
