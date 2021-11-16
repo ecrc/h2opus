@@ -45,6 +45,19 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
         assert(dim < dimension && idx < num_points);
         return pts[dim][idx];
     }
+
+    std::vector<T> getCoords()
+    {
+        std::vector<T> outpts;
+        outpts.resize(dimension * num_points);
+        for (size_t j = 0; j < num_points; j++)
+        {
+            for (int d = 0; d < dimension; d++)
+                outpts[dimension * j + d] = getDataPoint(j, d);
+        }
+
+        return outpts;
+    }
 };
 
 template <class T> T getCorrelationLength(int dim)

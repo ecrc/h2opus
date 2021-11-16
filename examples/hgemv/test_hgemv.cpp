@@ -25,6 +25,7 @@ int main(int argc, char **argv)
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool check_approx_err = arg_parser.flag("c", "check_approx_err", "Check the approximation error", false);
     bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
+    bool print_dense = arg_parser.flag("d", "print_dense", "Print dense matrix to standard output", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
     if (!arg_parser.valid() || print_help)
@@ -125,6 +126,15 @@ int main(int argc, char **argv)
             max_approx_err = std::max(max_approx_err, approx_err);
         }
         printf("CPU Max approx error = %e\n", max_approx_err);
+    }
+
+    // Convert to dense output
+    if (print_dense)
+    {
+        H2Opus_Real *dmat = (H2Opus_Real *)malloc(n * n * sizeof(H2Opus_Real));
+        expandHmatrix(hmatrix, dmat);
+        printDenseMatrix(dmat, n, n, n, 8, NULL);
+        free(dmat);
     }
 
 #ifdef H2OPUS_USE_GPU
