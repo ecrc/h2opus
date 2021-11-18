@@ -154,10 +154,6 @@ int main(int argc, char **argv)
     {
         fillArray(vec_ptr(gpu_y), n * num_vectors, 0, h2opus_handle->getMainStream(), H2OPUS_HWTYPE_GPU);
         hgemv(H2Opus_NoTrans, alpha, gpu_h, vec_ptr(gpu_x), n, beta, vec_ptr(gpu_y), n, num_vectors, h2opus_handle);
-        printf("GPU x\n");
-        printThrustVector(gpu_x);
-        printf("GPU y\n");
-        printThrustVector(gpu_y);
     }
     HLibProfile::getHgemvPerf(total_gops, total_time, total_perf, total_dev);
     printf("GPU Total execution time: %f s at %f (Gflop/s) (%.3f dev)\n", total_time, total_perf, total_dev);
