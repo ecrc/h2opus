@@ -28,20 +28,20 @@ template <class T> struct HLRU_Global_Offset_Pointer_Array
 
 template <class T> struct HLRU_Global_BasisLeaf_Functor
 {
-    T** original_basis_ptrs;
-    T*  update_base_ptr;
-    T** updated_basis_ptrs;
-    T** update_ptrs;
+    T **original_basis_ptrs;
+    T *update_base_ptr;
+    T **updated_basis_ptrs;
+    T **update_ptrs;
     int *update_rows, *update_cols;
     int *node_start, *node_size;
     int leaf_start, leaf_ld, leaf_rank, update_rank;
 
-    HLRU_Global_BasisLeaf_Functor(T **original_basis_ptrs, const T *update_base_ptr, T **updated_basis_ptrs, T **update_ptrs,
-                                  int *update_rows, int *update_cols, int *node_start, int *node_size, int leaf_start,
-                                  int leaf_ld, int leaf_rank, int update_rank)
+    HLRU_Global_BasisLeaf_Functor(T **original_basis_ptrs, const T *update_base_ptr, T **updated_basis_ptrs,
+                                  T **update_ptrs, int *update_rows, int *update_cols, int *node_start, int *node_size,
+                                  int leaf_start, int leaf_ld, int leaf_rank, int update_rank)
     {
         this->original_basis_ptrs = original_basis_ptrs;
-        this->update_base_ptr = (T*)update_base_ptr;
+        this->update_base_ptr = (T *)update_base_ptr;
 
         this->updated_basis_ptrs = updated_basis_ptrs;
         this->update_ptrs = update_ptrs;
@@ -85,10 +85,11 @@ template <class T> struct HLRU_Global_Dense_Update_Functor
     int ldm, ldu, ldv, rank;
 
   public:
-    HLRU_Global_Dense_Update_Functor(int ldm, const T *U, int ldu, const T *V, int ldv, int rank, T **U_ptrs, T **V_ptrs,
-                                     int *rows_array, int *cols_array, int *ranks_array, int *ldm_array, int *ldu_array,
-                                     int *ldv_array, int *dense_leaf_tree_index, int *node_u_index, int *node_v_index,
-                                     int *node_u_start, int *node_v_start, int *node_u_len, int *node_v_len)
+    HLRU_Global_Dense_Update_Functor(int ldm, const T *U, int ldu, const T *V, int ldv, int rank, T **U_ptrs,
+                                     T **V_ptrs, int *rows_array, int *cols_array, int *ranks_array, int *ldm_array,
+                                     int *ldu_array, int *ldv_array, int *dense_leaf_tree_index, int *node_u_index,
+                                     int *node_v_index, int *node_u_start, int *node_v_start, int *node_u_len,
+                                     int *node_v_len)
     {
         this->U = U;
         this->ldu = ldu;
@@ -125,8 +126,8 @@ template <class T> struct HLRU_Global_Dense_Update_Functor
         int u_index = node_u_index[tree_index];
         int v_index = node_v_index[tree_index];
 
-        U_ptrs[leaf_index] = (T*)(U + node_u_start[u_index]);
-        V_ptrs[leaf_index] = (T*)(V + node_v_start[v_index]);
+        U_ptrs[leaf_index] = (T *)(U + node_u_start[u_index]);
+        V_ptrs[leaf_index] = (T *)(V + node_v_start[v_index]);
 
         rows_array[leaf_index] = node_u_len[u_index];
         cols_array[leaf_index] = node_v_len[v_index];
@@ -166,9 +167,9 @@ void hlru_global_basis_leaf_marshal_batch(T **original_basis_ptrs, const T *upda
 }
 
 template <class T, int hw>
-void hlru_dense_update_global_marshal_batch(int ldm, const T *U, int ldu, const T *V, int ldv, int rank, T **U_ptrs, T **V_ptrs,
-                                            int *rows_array, int *cols_array, int *ranks_array, int *ldm_array,
-                                            int *ldu_array, int *ldv_array, int *dense_leaf_tree_index,
+void hlru_dense_update_global_marshal_batch(int ldm, const T *U, int ldu, const T *V, int ldv, int rank, T **U_ptrs,
+                                            T **V_ptrs, int *rows_array, int *cols_array, int *ranks_array,
+                                            int *ldm_array, int *ldu_array, int *ldv_array, int *dense_leaf_tree_index,
                                             int *node_u_index, int *node_v_index, int *node_u_start, int *node_v_start,
                                             int *node_u_len, int *node_v_len, int num_leaves,
                                             h2opusComputeStream_t stream)

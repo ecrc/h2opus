@@ -11,8 +11,8 @@
 ////////////////////////////////////////////////////////////////
 template <int hw>
 void hlru_update_dense_blocks_global(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_basis_tree, TBasisTree<hw> &v_basis_tree,
-                                     const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank, H2Opus_Real s,
-                                     h2opusComputeStream_t stream)
+                                     const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                                     H2Opus_Real s, h2opusComputeStream_t stream)
 {
     typedef typename VectorContainer<hw, int>::type IntVector;
     typedef typename VectorContainer<hw, H2Opus_Real *>::type RealPointerArray;
@@ -201,6 +201,7 @@ template <int hw>
 void hlru_sym_global_template(THMatrix<hw> &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
                               h2opusHandle_t handle)
 {
+    // TODO: nonsymmetric
     assert(hmatrix.sym == true);
 
     HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
@@ -235,7 +236,8 @@ void hlru_sym_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, int rank, 
 }
 
 #ifdef H2OPUS_USE_GPU
-void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s, h2opusHandle_t handle)
+void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
+                     h2opusHandle_t handle)
 {
     hlru_sym_global_template<H2OPUS_HWTYPE_GPU>(hmatrix, U, ldu, rank, s, handle);
 }

@@ -44,7 +44,8 @@ void hlru_sym_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, int rank, 
 #ifdef H2OPUS_USE_GPU
 int hlru_sym(HMatrix_GPU &hmatrix, LowRankUpdate_GPU &update, h2opusHandle_t handle);
 void hlru_dense_block_update(HMatrix_GPU &hmatrix, DenseBlockUpdate_GPU &update, h2opusHandle_t handle);
-void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s, h2opusHandle_t handle);
+void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
+                     h2opusHandle_t handle);
 #endif
 
 #endif
