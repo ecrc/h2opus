@@ -39,7 +39,7 @@ void hlru_update_dense_blocks_global(THNodeTree<hw> &hnodes, TBasisTree<hw> &u_b
     // M += U * V^T
     check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
         stream, H2Opus_NoTrans, H2Opus_Trans, vec_ptr(rows_array), vec_ptr(cols_array), vec_ptr(ranks_array), dense_dim,
-        dense_dim, rank, (H2Opus_Real)1, (const H2Opus_Real **)vec_ptr(U_ptrs), vec_ptr(ldu_array),
+        dense_dim, rank, s, (const H2Opus_Real **)vec_ptr(U_ptrs), vec_ptr(ldu_array),
         (const H2Opus_Real **)vec_ptr(V_ptrs), vec_ptr(ldv_array), (H2Opus_Real)1, vec_ptr(dense_ptrs),
         vec_ptr(ldm_array), num_dense_leaves));
 }
