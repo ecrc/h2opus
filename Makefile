@@ -182,8 +182,7 @@ H2OPUS_EXAMPLE_DIRS := \
                        examples/hgemv \
                        examples/horthog \
                        examples/hcompress \
-                       examples/hlru_global \
-                       examples/hlru_local \
+                       examples/hlru \
                        examples/hara \
                        examples/tlr \
                        examples/fd \

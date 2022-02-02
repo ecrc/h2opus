@@ -142,8 +142,8 @@ void hlru_update_transfer_matrices_global(TBasisTree<hw> &basis_tree, int update
 }
 
 template <int hw>
-void hlru_sym_update_basis_leaves_global(TBasisTree<hw> &basis_tree, const H2Opus_Real *A, int lda, int update_rank,
-                                         h2opusComputeStream_t stream)
+void hlru_update_basis_leaves_global(TBasisTree<hw> &basis_tree, const H2Opus_Real *A, int lda, int update_rank,
+                                     h2opusComputeStream_t stream)
 {
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
     typedef typename VectorContainer<hw, int>::type IntVector;
@@ -198,32 +198,50 @@ void hlru_sym_update_basis_leaves_global(TBasisTree<hw> &basis_tree, const H2Opu
 }
 
 template <int hw>
-void hlru_sym_global_template(THMatrix<hw> &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
-                              h2opusHandle_t handle)
+void hlru_global_template(THMatrix<hw> &hmatrix, const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                          H2Opus_Real s, h2opusHandle_t handle)
 {
-    // TODO: nonsymmetric
-    assert(hmatrix.sym == true);
+    if (U != V && hmatrix.sym)
+    {
+        hmatrix.v_basis_tree = hmatrix.u_basis_tree;
+        hmatrix.sym = false;
+    }
 
     HNodeTreeLevelData &hnode_level_data = hmatrix.hnodes.level_data;
     BasisTreeLevelData &u_level_data = hmatrix.u_basis_tree.level_data;
+    BasisTreeLevelData &v_level_data = hmatrix.v_basis_tree.level_data;
     h2opusComputeStream_t main_stream = handle->getMainStream();
 
     // Update basis tree
-    hlru_sym_update_basis_leaves_global<hw>(hmatrix.u_basis_tree, U, ldu, rank, main_stream);
+    hlru_update_basis_leaves_global<hw>(hmatrix.u_basis_tree, U, ldu, rank, main_stream);
     hlru_update_transfer_matrices_global<hw>(hmatrix.u_basis_tree, rank, main_stream);
+    if (!hmatrix.sym)
+    {
+        hlru_update_basis_leaves_global<hw>(hmatrix.v_basis_tree, V, ldv, rank, main_stream);
+        hlru_update_transfer_matrices_global<hw>(hmatrix.v_basis_tree, rank, main_stream);
+    }
 
     // Update hnodetree
     hlru_update_coupling_matrices_global<hw>(hmatrix.hnodes, s, rank, main_stream);
 
-    hlru_update_dense_blocks_global<hw>(hmatrix.hnodes, hmatrix.u_basis_tree, hmatrix.u_basis_tree, U, ldu, U, ldu,
-                                        rank, s, main_stream);
+    hlru_update_dense_blocks_global<hw>(hmatrix.hnodes, hmatrix.u_basis_tree,
+                                        hmatrix.sym ? hmatrix.u_basis_tree : hmatrix.v_basis_tree, U, ldu, V, ldv, rank,
+                                        s, main_stream);
 
     // Update ranks
     std::vector<int> new_ranks(hmatrix.u_basis_tree.depth);
     for (int i = 0; i < (int)new_ranks.size(); i++)
         new_ranks[i] = u_level_data.getLevelRank(i) + rank;
-
     u_level_data.setLevelRanks(vec_ptr(new_ranks));
+    if (!hmatrix.sym)
+    {
+        std::vector<int> new_ranks(hmatrix.v_basis_tree.depth);
+        for (int i = 0; i < (int)new_ranks.size(); i++)
+            new_ranks[i] = v_level_data.getLevelRank(i) + rank;
+        v_level_data.setLevelRanks(vec_ptr(new_ranks));
+    }
+
+    // XXX unsym??
     hnode_level_data.setRankFromBasis(u_level_data, 0);
 }
 
@@ -232,13 +250,27 @@ void hlru_sym_global_template(THMatrix<hw> &hmatrix, const H2Opus_Real *U, int l
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void hlru_sym_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s, h2opusHandle_t handle)
 {
-    hlru_sym_global_template<H2OPUS_HWTYPE_CPU>(hmatrix, U, ldu, rank, s, handle);
+    hlru_global_template<H2OPUS_HWTYPE_CPU>(hmatrix, U, ldu, U, ldu, rank, s, handle);
 }
 
 #ifdef H2OPUS_USE_GPU
 void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
                      h2opusHandle_t handle)
 {
-    hlru_sym_global_template<H2OPUS_HWTYPE_GPU>(hmatrix, U, ldu, rank, s, handle);
+    hlru_global_template<H2OPUS_HWTYPE_GPU>(hmatrix, U, ldu, U, ldu, rank, s, handle);
+}
+#endif
+
+void hlru_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                 H2Opus_Real s, h2opusHandle_t handle)
+{
+    hlru_global_template<H2OPUS_HWTYPE_CPU>(hmatrix, U, ldu, V, ldv, rank, s, handle);
+}
+
+#ifdef H2OPUS_USE_GPU
+void hlru_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                 H2Opus_Real s, h2opusHandle_t handle)
+{
+    hlru_global_template<H2OPUS_HWTYPE_GPU>(hmatrix, U, ldu, V, ldv, rank, s, handle);
 }
 #endif

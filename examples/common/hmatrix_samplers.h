@@ -20,7 +20,23 @@ class BasicHMatrixSampler : public HMatrixSampler
 {
   public:
     virtual int getMatrixDim() = 0;
+    virtual void sample(H2Opus_Real *, H2Opus_Real *, int) = 0;
     virtual H2Opus_Real get1Norm() = 0;
+    H2Opus_Real *compute() // XXX Only for host
+    {
+        int n = getMatrixDim();
+        size_t mem = (size_t)n * (size_t)n * sizeof(H2Opus_Real);
+        H2Opus_Real *o = (H2Opus_Real *)malloc(mem);
+        thrust::host_vector<H2Opus_Real> I(n, 0.0);
+        for (int i = 0; i < n; i++)
+        {
+            I[i] = 1.0;
+            if (i)
+                I[i - 1] = 0.0;
+            sample(vec_ptr(I), o + n * i, 1);
+        }
+        return o;
+    }
 };
 
 template <int hw> class LowRankSampler : public BasicHMatrixSampler
@@ -30,7 +46,7 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
 
     RealVector temp_buffer;
     H2Opus_Real *U, *V;
-    int n, rank;
+    int n, rank, ldu, ldv;
     h2opusHandle_t h2opus_handle;
     h2opusComputeStream_t main_stream;
     H2Opus_Real one_norm_A;
@@ -41,6 +57,22 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
         this->U = U;
         this->V = V;
         this->n = n;
+        this->ldu = n;
+        this->ldv = n;
+        this->rank = rank;
+        this->h2opus_handle = h2opus_handle;
+        this->main_stream = h2opus_handle->getMainStream();
+
+        this->one_norm_A = sampler_1_norm<H2Opus_Real, hw>(this, n, ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+    }
+
+    LowRankSampler(H2Opus_Real *U, int ldu, H2Opus_Real *V, int ldv, int n, int rank, h2opusHandle_t h2opus_handle)
+    {
+        this->U = U;
+        this->V = V;
+        this->n = n;
+        this->ldu = ldu;
+        this->ldv = ldv;
         this->rank = rank;
         this->h2opus_handle = h2opus_handle;
         this->main_stream = h2opus_handle->getMainStream();
@@ -53,10 +85,10 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
         if (temp_buffer.size() < (size_t)n * samples)
             temp_buffer.resize(n * samples);
 
-        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_Trans, H2Opus_NoTrans, rank, samples, n, 1, V, n, input, n, 0,
+        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_Trans, H2Opus_NoTrans, rank, samples, n, 1, V, ldv, input, n, 0,
                                    vec_ptr(temp_buffer), n);
 
-        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_NoTrans, H2Opus_NoTrans, n, samples, rank, 1, U, n,
+        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_NoTrans, H2Opus_NoTrans, n, samples, rank, 1, U, ldu,
                                    vec_ptr(temp_buffer), n, 0, output, n);
     }
 

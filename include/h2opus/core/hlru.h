@@ -37,6 +37,8 @@ void hlru_dense_block_update(HMatrix &hmatrix, DenseBlockUpdate &update, h2opusH
  * @param[in] h2opus_handle The H2Opus handle
  */
 void hlru_sym_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s, h2opusHandle_t handle);
+void hlru_global(HMatrix &hmatrix, const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                 H2Opus_Real s, h2opusHandle_t handle);
 
 //////////////////////////////////////////////////////////////////////
 // GPU
@@ -46,6 +48,8 @@ int hlru_sym(HMatrix_GPU &hmatrix, LowRankUpdate_GPU &update, h2opusHandle_t han
 void hlru_dense_block_update(HMatrix_GPU &hmatrix, DenseBlockUpdate_GPU &update, h2opusHandle_t handle);
 void hlru_sym_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, int rank, H2Opus_Real s,
                      h2opusHandle_t handle);
+void hlru_global(HMatrix_GPU &hmatrix, const H2Opus_Real *U, int ldu, const H2Opus_Real *V, int ldv, int rank,
+                 H2Opus_Real s, h2opusHandle_t handle);
 #endif
 
 #endif
