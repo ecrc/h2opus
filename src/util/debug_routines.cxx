@@ -931,26 +931,27 @@ void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label, FILE *f
     fprintf(fp, "]\n");
 
     fprintf(fp, "%s Basis [\n", label);
-    int leaf_start = basis_tree.getLevelStart(basis_tree.depth - 1);
-    int leaf_rank = basis_tree.getLevelRank(basis_tree.depth - 1);
+    int leaf_start = basis_tree.depth ? basis_tree.getLevelStart(basis_tree.depth - 1) : 0;
+    int leaf_rank = basis_tree.depth ? basis_tree.getLevelRank(basis_tree.depth - 1) : 0;
     int ld = basis_tree.leaf_size;
-
     for (int leaf = 0; leaf < basis_tree.basis_leaves; leaf++)
     {
         int node_id = leaf + leaf_start;
-        fprintf(fp, "\tNode %d: [%d; %d] \n\t\t", node_id, basis_tree.node_start[node_id],
-                basis_tree.node_start[node_id] + basis_tree.node_len[node_id]);
+        fprintf(fp, "\tNode %d: [%d; %d] (leaf_rank %d)\n", node_id, basis_tree.node_start[node_id],
+                basis_tree.node_start[node_id] + basis_tree.node_len[node_id], leaf_rank);
         H2Opus_Real *u_leaf = basis_tree.getBasisLeaf(leaf);
 
-        for (int i = 0; i < basis_tree.node_len[node_id]; i++)
+        if (leaf_rank)
         {
-            for (int j = 0; j < leaf_rank; j++)
+            for (int i = 0; i < basis_tree.node_len[node_id]; i++)
             {
-                fprintf(fp, format, u_leaf[i + j * ld]);
-            }
-            fprintf(fp, "\n");
-            if (i != basis_tree.node_len[node_id] - 1)
                 fprintf(fp, "\t\t");
+                for (int j = 0; j < leaf_rank; j++)
+                {
+                    fprintf(fp, format, u_leaf[i + j * ld]);
+                }
+                fprintf(fp, "\n");
+            }
         }
     }
     fprintf(fp, "]\n");

@@ -61,11 +61,12 @@ void hara_template(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_rank,
 
         timer.start();
 
+        sampler->nsamples = 0;
         hara_weak_admissibility_low_rank_update(sampler, hmatrix, low_rank_update, vec_ptr(sampled_U),
                                                 vec_ptr(sampled_V), level, max_rank, r, ara_tol, bs, h2opus_handle);
 
         sampling_time[level] = timer.stop();
-        samples_per_level[level] = 2 * low_rank_update.total_rank;
+        samples_per_level[level] = sampler->nsamples;
         total_samples += samples_per_level[level];
 
         if (verbose)
@@ -100,6 +101,7 @@ void hara_template(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_rank,
     // Generate diagonal dense updates - use the U and V samples as temporary data
     TDenseBlockUpdate<hw> dense_update;
 
+    sampler->nsamples = 0;
     timer.start();
     hara_weak_admissibility_dense_update(sampler, hmatrix, vec_ptr(sampled_U), vec_ptr(sampled_V), dense_update,
                                          h2opus_handle);
@@ -112,7 +114,7 @@ void hara_template(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_rank,
     total_lru_time += dense_update_time;
     total_sampling_time += dense_sampling_time;
     total_time += dense_update_time + dense_sampling_time;
-    total_samples += hmatrix.u_basis_tree.leaf_size;
+    total_samples += sampler->nsamples;
 
     if (verbose)
     {

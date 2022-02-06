@@ -17,6 +17,7 @@ void sampleLevel(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int rank, H2Opu
 
     // Sample the original matrix A*x
     sampler->sample(input, output, rank);
+    sampler->nsamples += rank;
 
     // compute output = output - A_H^l * x = A * x - A_H^l * x
     hgemv(H2Opus_NoTrans, -1, hmatrix, input, n, 1, output, n, rank, h2opus_handle);

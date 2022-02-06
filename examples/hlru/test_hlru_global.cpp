@@ -24,6 +24,7 @@ int main(int argc, char **argv)
     bool matunsym = arg_parser.flag("matunsym", "matunsym", "Unsymmetric structure of initial matrix", false);
     bool lrunsym = arg_parser.flag("lrsunsym", "lrunsym", "Unsymmetric low rank update", false);
 
+    bool dump = arg_parser.flag("d", "dump", "Dump hmatrix structure", false);
     bool check_lru_err = arg_parser.flag("c", "check_lru_err", "Check the low rank update error", true);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
@@ -52,9 +53,10 @@ int main(int argc, char **argv)
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Setup hmatrix construction parameters:
     // Create a functor that can generate the matrix entries from two points
-    FunctionGen<H2Opus_Real> func_gen(dim);
+    // FunctionGen<H2Opus_Real> func_gen(dim);
+    DiagGen<H2Opus_Real> func_gen(dim);
     // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
-    BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
+    BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
 
     // Create the admissibility condition using the eta parameter
     // Decreasing eta refines the matrix tree and increasing it coarsens the tree
@@ -74,6 +76,13 @@ int main(int argc, char **argv)
     // Create h2opus handle
     h2opusHandle_t h2opus_handle;
     h2opusCreateHandle(&h2opus_handle);
+
+    // Dump hmatrix structure
+    if (dump)
+    {
+        printf("Initial HMatrix\n");
+        dumpHMatrix(hmatrix, 4, NULL);
+    }
 
     // Generate a random low rank update
     int ldu = n + 4;
@@ -113,6 +122,13 @@ int main(int argc, char **argv)
     {
         H2Opus_Real lru_err = sampler_difference<H2Opus_Real, H2OPUS_HWTYPE_CPU>(&sampler, hmatrix, 40, h2opus_handle);
         printf("CPU Global update difference = %e\n", lru_err / lru_norm);
+    }
+
+    // Dump hmatrix structure
+    if (dump)
+    {
+        printf("HMatrix after low-rank update\n");
+        dumpHMatrix(hmatrix, 4, NULL);
     }
 
 #ifdef H2OPUS_USE_GPU

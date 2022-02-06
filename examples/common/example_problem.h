@@ -92,6 +92,27 @@ template <class T> class FunctionGen
     }
 };
 
+// This is an example of a functor that evaluates the kernel
+template <class T> class DiagGen
+{
+  private:
+    int dim;
+
+  public:
+    DiagGen(int dim)
+    {
+        this->dim = dim;
+    }
+
+    T operator()(T *pt_x, T *pt_y)
+    {
+        T diff = 0;
+        for (int d = 0; d < dim; d++)
+            diff += (pt_x[d] - pt_y[d]) * (pt_x[d] - pt_y[d]);
+        return diff > 0.0 ? 0.0 : pt_x[0];
+    }
+};
+
 // Simple class to generate matrix entries in the h-ordering
 template <class T> class MatGen
 {

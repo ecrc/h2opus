@@ -218,7 +218,7 @@ template <int hw> struct TBasisTree
     {
         H2Opus_Real *leaf_base = vec_ptr(basis_mem);
         size_t entries = leaf_size * getLevelRank(depth - 1) * index;
-        assert(entries < basis_mem.size());
+        assert(entries < basis_mem.size() || (!leaf_base && !entries));
 
         return leaf_base + entries;
     }
