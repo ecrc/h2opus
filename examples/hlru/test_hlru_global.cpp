@@ -41,12 +41,14 @@ int main(int argc, char **argv)
     size_t n = grid_x * grid_y * grid_z;
     printf("N = %d\n", (int)n);
     // Create point cloud
-    int dim = (grid_z == 1 ? 2 : 3);
+    int dim = (grid_z == 1 ? (grid_y == 1 ? 1 : 2) : 3);
     PointCloud<H2Opus_Real> pt_cloud(dim, n);
-    if (grid_z > 1)
+    if (dim == 3)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
-    else
+    else if (dim == 2)
         generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+    else
+        generate1DGrid<H2Opus_Real>(pt_cloud, grid_x, 0, 1);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Matrix construction

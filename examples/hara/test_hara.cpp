@@ -89,6 +89,7 @@ int main(int argc, char **argv)
     H2Opus_Real trunc_eps = arg_parser.option<H2Opus_Real>(
         "te", "trunc_eps", "Relative truncation error threshold for the construction", 1e-4);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
+    bool dump = arg_parser.flag("d", "dump", "Dump hmatrix structure", false);
     bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
@@ -104,21 +105,26 @@ int main(int argc, char **argv)
     size_t n = grid_x * grid_y * grid_z;
     printf("N = %d\n", (int)n);
     // Create point cloud
-    int dim = (grid_z == 1 ? 2 : 3);
+    int dim = (grid_z == 1 ? (grid_y == 1 ? 1 : 2) : 3);
     PointCloud<H2Opus_Real> pt_cloud(dim, n);
-    if (grid_z > 1)
+    if (dim == 3)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
-    else
+    else if (dim == 2)
         generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+    else
+        generate1DGrid<H2Opus_Real>(pt_cloud, grid_x, 0, 1);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Matrix construction
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Setup hmatrix construction parameters:
     // Create a functor that can generate the matrix entries from two points
-    FunctionGen<H2Opus_Real> func_gen(dim);
+    // FunctionGen<H2Opus_Real> func_gen(dim);
+    //// Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
+    // BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
+    DiagGen<H2Opus_Real> func_gen(dim);
     // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
-    BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
+    BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
 
     // Create the admissibility condition using the eta parameter
     // Decreasing eta refines the matrix tree and increasing it coarsens the tree
@@ -129,6 +135,13 @@ int main(int argc, char **argv)
     buildHMatrix(hmatrix, &pt_cloud, admissibility, entry_gen, leaf_size, cheb_grid_pts);
     buildHMatrixStructure(constructed_hmatrix, &pt_cloud, leaf_size, admissibility);
     HMatrix zero_hmatrix = constructed_hmatrix;
+
+    // Dump hmatrix structure
+    if (dump)
+    {
+        printf("Initial HMatrix\n");
+        dumpHMatrix(constructed_hmatrix, 2, NULL);
+    }
 
     if (output_eps)
         outputEps(hmatrix, "structure.eps");
@@ -147,15 +160,24 @@ int main(int argc, char **argv)
     // Reconstruction
     test_construction<H2OPUS_HWTYPE_CPU>(&cpu_reconstruct_sampler, constructed_hmatrix, max_samples, trunc_eps,
                                          "Matrix", h2opus_handle);
+    // Dump hmatrix structure
+    if (dump)
+    {
+        printf("Constructed HMatrix\n");
+        dumpHMatrix(constructed_hmatrix, 2, NULL);
+    }
+
     if (print_results)
     {
-        dumpHMatrix(constructed_hmatrix, 2, NULL);
+        if (!dump)
+            dumpHMatrix(constructed_hmatrix, 2, NULL);
 
         H2Opus_Real *dmat = (H2Opus_Real *)malloc(n * n * sizeof(H2Opus_Real));
         expandHmatrix(constructed_hmatrix, dmat);
         printDenseMatrix(dmat, n, n, n, 2, NULL);
         free(dmat);
     }
+
     // Clear out matrix data
     constructed_hmatrix = zero_hmatrix;
 
