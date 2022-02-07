@@ -69,6 +69,7 @@ template <class T> T getCorrelationLength(int dim)
 }
 
 // This is an example of a functor that evaluates the kernel
+// K(x,y) = || x - y ||
 template <class T> class FunctionGen
 {
   private:
@@ -93,6 +94,7 @@ template <class T> class FunctionGen
 };
 
 // This is an example of a functor that evaluates the kernel
+// K(x,y) = x[0] if x == y else 0.0
 template <class T> class DiagGen
 {
   private:

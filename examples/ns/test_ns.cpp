@@ -8,7 +8,7 @@
 #define APPROX_NORM_MAX_SAMPLES 40
 
 template <int hw>
-void cgp(BasicHMatrixSampler *A, THMatrix<hw> &M, H2Opus_Real *x, H2Opus_Real *b, int max_it, H2Opus_Real tol, int &it,
+void cgp(ExamplesSampler *A, THMatrix<hw> &M, H2Opus_Real *x, H2Opus_Real *b, int max_it, H2Opus_Real tol, int &it,
          H2Opus_Real &error, h2opusHandle_t h2opus_handle)
 {
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;

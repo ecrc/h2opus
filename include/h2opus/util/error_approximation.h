@@ -48,7 +48,7 @@ inline H2Opus_Real sampler_norm(HMatrixSampler *sampler, int n, int samples, h2o
         sampler->sample(x2, x1, 1);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -130,7 +130,7 @@ inline H2Opus_Real hmatrix_norm(THMatrix<hw> &hmatrix, int samples, h2opusHandle
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
 
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -167,7 +167,7 @@ inline H2Opus_Real sampler_difference(HMatrixSampler *sampler, THMatrix<hw> &hma
         hgemv(H2Opus_NoTrans, 1, hmatrix, x2, n, -1, x1, n, 1, h2opus_handle);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -207,7 +207,7 @@ inline H2Opus_Real inverse_error(THMatrix<hw> &hmatrix, THMatrix<hw> &inverse, i
         blas_axpy<H2Opus_Real, hw>(h2opus_stream, n, -1, x3, 1, x1, 1);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -253,7 +253,7 @@ inline H2Opus_Real pseudo_inverse_error(THMatrix<hw> &hmatrix, THMatrix<hw> &pse
         hgemv(H2Opus_NoTrans, 1, pseudo_inverse, x2, n, 0, x1, n, 1, h2opus_handle);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -299,7 +299,7 @@ inline H2Opus_Real pseudo_inverse_error(HMatrixSampler *sampler, THMatrix<hw> &p
         hgemv(H2Opus_NoTrans, 1, pseudo_inverse, x2, n, 0, x1, n, 1, h2opus_handle);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -335,7 +335,7 @@ inline H2Opus_Real product_norm(THMatrix<hw> &hmatrix, THMatrix<hw> &inverse, in
         hgemv(H2Opus_NoTrans, 1, inverse, x2, n, 0, x1, n, 1, h2opus_handle);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -372,7 +372,7 @@ inline H2Opus_Real product_norm(HMatrixSampler *sampler, THMatrix<hw> &inverse, 
         hgemv(H2Opus_NoTrans, 1, inverse, x2, n, 0, x1, n, 1, h2opus_handle);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }
@@ -412,7 +412,7 @@ inline H2Opus_Real inverse_error(HMatrixSampler *sampler, THMatrix<hw> &inverse,
         blas_axpy<H2Opus_Real, hw>(h2opus_stream, n, -1, x3, 1, x1, 1);
 
         norm = sqrt(normalize_vector<H2Opus_Real, hw>(h2opus_stream, x1, n));
-        if (norm != 0 && abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
+        if (norm == 0 || abs(prev_norm - norm) / norm < H2OPUS_NORM_APPROX_THRESHOLD)
             break;
         prev_norm = norm;
     }

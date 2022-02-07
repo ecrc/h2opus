@@ -55,9 +55,6 @@ void hlru_update_coupling_matrices_global(THNodeTree<hw> &hnodes, H2Opus_Real s,
     HNodeTreeLevelData &hnode_level_data = hnodes.level_data;
     int num_levels = hnode_level_data.depth;
 
-    // XXX
-    hnode_level_data.setRankFromBasis(u_level_data, 0);
-
     // Pointers used in the batch routines
     int max_nodes = hnode_level_data.getMaxLevelCouplingNodes();
     RealPointerArray original_node_ptrs(max_nodes), new_node_ptrs(max_nodes);
@@ -96,6 +93,8 @@ void hlru_update_coupling_matrices_global(THNodeTree<hw> &hnodes, H2Opus_Real s,
         H2OpusBatched<H2Opus_Real, hw>::setDiagonal(stream, update_rank, update_rank, vec_ptr(new_node_ptrs), new_rank,
                                                     s, level_nodes);
     }
+
+    hnode_level_data.setRankFromBasis(u_level_data, 0);
 }
 
 template <int hw>
