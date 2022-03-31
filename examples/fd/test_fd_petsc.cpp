@@ -132,11 +132,11 @@ static PetscErrorCode BuildD(Mat A, PointCloud<H2Opus_Real>& pt_cloud, FDGen<H2O
     // Create the PETSc matrix
     Mat Ao;
     std::vector<PetscScalar> coords = opt_cloud->getCoordsV();
-    ierr = MatCreateH2OpusFromKernel(PetscObjectComm((PetscObject)A),                          // the communicator associated to the matrix
-                                     PETSC_DECIDE, PETSC_DECIDE, no, no,        // local and global sizes
-                                     dim,  coords.data(), PETSC_FALSE,       // point coordinates
+    ierr = MatCreateH2OpusFromKernel(PetscObjectComm((PetscObject)A),       // the MPI communicator associated to the matrix
+                                     PETSC_DECIDE, PETSC_DECIDE, no, no,    // local and global sizes
+                                     dim,  coords.data(), PETSC_FALSE,      // point coordinates
                                      petsc_kernel, &fdgen,                  // kernel
-                                     eta, leafsize, cheb_grid_pts,                     // construction parameters (can be also selected at runtime from PETSc)
+                                     eta, leafsize, cheb_grid_pts,          // construction parameters (can be also selected at runtime from PETSc)
                                      &Ao);CHKERRQ(ierr);
 
     // Always bind this larger matrix to run on the CPU boundedness

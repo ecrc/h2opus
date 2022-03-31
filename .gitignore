@@ -22,3 +22,4 @@ examples/fd/test_fd
 examples/fd/test_fd_dist
 examples/fd/test_fd_petsc
 examples/tlr/test_tlr
+examples/spatialstatistics/spatial_statistics

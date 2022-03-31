@@ -202,7 +202,8 @@ void generate3DGrid(PointCloud<T> &pt_cloud, int grid_x, int grid_y, int grid_z,
     }
 }
 
-template <typename T> void generateRandomSphereSurface(PointCloud<T> &pt_cloud, int num_pts, T r, unsigned int seed)
+template <typename T>
+void generateRandomSphereSurface(PointCloud<T> &pt_cloud, int num_pts, T r = 1.0, unsigned int seed = 1234)
 {
     thrust::minstd_rand seed_rng(seed);
     thrust::uniform_int_distribution<unsigned int> seed_dist;

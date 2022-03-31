@@ -186,7 +186,8 @@ H2OPUS_EXAMPLE_DIRS := \
                        examples/hara \
                        examples/tlr \
                        examples/fd \
-                       examples/ns
+                       examples/ns \
+                       examples/spatialstatistics
 
 # GPU support
 ifneq ($(H2OPUS_USE_GPU),)
@@ -225,6 +226,7 @@ H2OPUS_EXAMPLE_SRC_LIST := $(wildcard $(addsuffix /*.cpp, $(H2OPUS_EXAMPLE_DIRS)
 H2OPUS_EXAMPLE_INC_LIST := $(wildcard $(addsuffix /*.h, $(H2OPUS_EXAMPLE_DIRS)))
 # Keep PETSc examples formatted PETSc-style
 H2OPUS_EXAMPLE_SRC_LIST := $(filter-out examples/fd/test_fd_petsc.cpp,$(H2OPUS_EXAMPLE_SRC_LIST))
+H2OPUS_EXAMPLE_SRC_LIST := $(filter-out examples/spatialstatistics/spatial_statistics.cpp,$(H2OPUS_EXAMPLE_SRC_LIST))
 
 H2OPUS_LIBS := $(KBLAS_LIBS) $(MAGMA_LIBS) $(BLAS_LIBS) $(CUDA_LIBS) $(LDFLAGS)
 
