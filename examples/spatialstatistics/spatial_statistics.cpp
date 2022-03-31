@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     PetscInt num_points = 1024;
     PetscBool dump_points = PETSC_FALSE;
     PetscReal phi = 0.5, nu = 1.0;
-    PetscInt m = 64, cheb_grid_pts = 8;
+    PetscInt m = 64, cheb_grid_pts = 5;
     PetscReal eta = DEFAULT_ETA, trunc_eps = 0.0;
     PetscBool forcecpu = PETSC_FALSE;
     PetscBool native = PETSC_TRUE;
