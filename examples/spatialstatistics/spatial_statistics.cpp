@@ -91,6 +91,7 @@ int main(int argc, char **argv)
       ierr = MatH2OpusCompress(A,trunc_eps * norm2);CHKERRQ(ierr);
       ierr = PetscLogStagePop();CHKERRQ(ierr);
       if (summary) { stime[1] = MPI_Wtime() - stime[1]; }
+      ierr = MatViewFromOptions(A,NULL,"-mat_view");CHKERRQ(ierr);
 
       // Print norms
       PetscReal cnorm2;
