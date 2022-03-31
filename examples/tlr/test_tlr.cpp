@@ -53,15 +53,14 @@ int main(int argc, char **argv)
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Geometry and generation
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    size_t n = grid_x * grid_y * grid_z;
-    printf("N = %d\n", (int)n);
     // Create point cloud
-    int dim = (grid_z == 1 ? 2 : 3);
-    PointCloud<H2Opus_Real> pt_cloud(dim, n);
+    PointCloud<H2Opus_Real> pt_cloud;
     if (grid_z > 1)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
     else
         generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+    size_t n = pt_cloud.getDataSetSize();
+    printf("N = %d\n", (int)n);
 
     // generateRandomSphere<H2Opus_Real>(pt_cloud, n, 2, 1234);
     // generate3DRandomPointCloud<H2Opus_Real>(pt_cloud, n, 0, 1);

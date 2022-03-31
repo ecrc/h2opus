@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     printf("N = %d\n", (int)n);
     // Create point cloud
     int dim = (grid_z == 1 ? (grid_y == 1 ? 1 : 2) : 3);
-    PointCloud<H2Opus_Real> pt_cloud(dim, n);
+    PointCloud<H2Opus_Real> pt_cloud;
     if (dim == 3)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
     else if (dim == 2)
@@ -77,8 +77,8 @@ int main(int argc, char **argv)
     // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
     BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
 
-    //DiagGen<H2Opus_Real> func_gen(dim);
-    //BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
+    // DiagGen<H2Opus_Real> func_gen(dim);
+    // BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
 
     // Create the admissibility condition using the eta parameter
     // Decreasing eta refines the matrix tree and increasing it coarsens the tree
