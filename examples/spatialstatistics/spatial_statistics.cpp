@@ -23,14 +23,17 @@ int main(int argc, char **argv)
     if (ierr) return ierr;
 
     // Argument parsing
-    PetscInt num_points = 1024, m = 64, cheb_grid_pts = 8;
+    PetscInt num_points = 1024;
+    PetscBool dump_points = PETSC_FALSE;
     PetscReal phi = 0.5, nu = 1.0;
+    PetscInt m = 64, cheb_grid_pts = 8;
     PetscReal eta = DEFAULT_ETA, trunc_eps = 0.0;
     PetscBool forcecpu = PETSC_FALSE;
     PetscBool native = PETSC_TRUE;
     PetscBool summary = PETSC_TRUE;
     ierr = PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");CHKERRQ(ierr);
     ierr = PetscOptionsInt("-n", "Number of random points", __FILE__, num_points, &num_points, NULL);CHKERRQ(ierr);
+    ierr = PetscOptionsBool("-dump_points", "Dump points", __FILE__, dump_points, &dump_points, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsReal("-phi", "Phi in kernel", __FILE__, phi, &phi, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsReal("-nu", "Nu in kernel", __FILE__, nu, &nu, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsInt("-m", "Leaf size in the KD-tree", __FILE__, m, &m, NULL);CHKERRQ(ierr);
@@ -57,6 +60,7 @@ int main(int argc, char **argv)
     size_t n = pt_cloud.getDataSetSize();
     int dim = pt_cloud.getDimension();
     ierr = PetscPrintf(PETSC_COMM_WORLD, "N = %ld\n", n);CHKERRQ(ierr);
+    if (dump_points) pt_cloud.dump();
 
     // Create a functor that can generate the matrix entries from two points
     Spatial_Statistics<H2Opus_Real> kgen(phi,nu,dim);
