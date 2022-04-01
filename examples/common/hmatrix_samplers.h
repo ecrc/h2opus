@@ -16,21 +16,37 @@
 /////////////////////////////////////////////////////////////////////////////
 // Samplers for various matrix formats
 /////////////////////////////////////////////////////////////////////////////
-class BasicHMatrixSampler : public HMatrixSampler
+class ExamplesSampler : public HMatrixSampler
 {
   public:
     virtual int getMatrixDim() = 0;
+    virtual void sample(H2Opus_Real *, H2Opus_Real *, int) = 0;
     virtual H2Opus_Real get1Norm() = 0;
+    H2Opus_Real *compute() // XXX Only for host
+    {
+        int n = getMatrixDim();
+        size_t mem = (size_t)n * (size_t)n * sizeof(H2Opus_Real);
+        H2Opus_Real *o = (H2Opus_Real *)malloc(mem);
+        thrust::host_vector<H2Opus_Real> I(n, 0.0);
+        for (int i = 0; i < n; i++)
+        {
+            I[i] = 1.0;
+            if (i)
+                I[i - 1] = 0.0;
+            sample(vec_ptr(I), o + n * i, 1);
+        }
+        return o;
+    }
 };
 
-template <int hw> class LowRankSampler : public BasicHMatrixSampler
+template <int hw> class LowRankSampler : public ExamplesSampler
 {
   private:
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
 
     RealVector temp_buffer;
     H2Opus_Real *U, *V;
-    int n, rank;
+    int n, rank, ldu, ldv;
     h2opusHandle_t h2opus_handle;
     h2opusComputeStream_t main_stream;
     H2Opus_Real one_norm_A;
@@ -41,6 +57,22 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
         this->U = U;
         this->V = V;
         this->n = n;
+        this->ldu = n;
+        this->ldv = n;
+        this->rank = rank;
+        this->h2opus_handle = h2opus_handle;
+        this->main_stream = h2opus_handle->getMainStream();
+
+        this->one_norm_A = sampler_1_norm<H2Opus_Real, hw>(this, n, ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+    }
+
+    LowRankSampler(H2Opus_Real *U, int ldu, H2Opus_Real *V, int ldv, int n, int rank, h2opusHandle_t h2opus_handle)
+    {
+        this->U = U;
+        this->V = V;
+        this->n = n;
+        this->ldu = ldu;
+        this->ldv = ldv;
         this->rank = rank;
         this->h2opus_handle = h2opus_handle;
         this->main_stream = h2opus_handle->getMainStream();
@@ -53,10 +85,10 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
         if (temp_buffer.size() < (size_t)n * samples)
             temp_buffer.resize(n * samples);
 
-        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_Trans, H2Opus_NoTrans, rank, samples, n, 1, V, n, input, n, 0,
+        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_Trans, H2Opus_NoTrans, rank, samples, n, 1, V, ldv, input, n, 0,
                                    vec_ptr(temp_buffer), n);
 
-        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_NoTrans, H2Opus_NoTrans, n, samples, rank, 1, U, n,
+        blas_gemm<H2Opus_Real, hw>(main_stream, H2Opus_NoTrans, H2Opus_NoTrans, n, samples, rank, 1, U, ldu,
                                    vec_ptr(temp_buffer), n, 0, output, n);
     }
 
@@ -71,7 +103,7 @@ template <int hw> class LowRankSampler : public BasicHMatrixSampler
     }
 };
 
-template <int hw> class DenseSampler : public BasicHMatrixSampler
+template <int hw> class DenseSampler : public ExamplesSampler
 {
   private:
     typedef typename VectorContainer<hw, int>::type IntVector;
@@ -150,7 +182,7 @@ template <int hw> class DenseSampler : public BasicHMatrixSampler
     }
 };
 
-template <int hw> class SimpleHMatrixSampler : public BasicHMatrixSampler
+template <int hw> class SimpleHMatrixSampler : public ExamplesSampler
 {
   private:
     typedef typename VectorContainer<hw, int>::type IntVector;
@@ -189,6 +221,18 @@ template <int hw> class SimpleHMatrixSampler : public BasicHMatrixSampler
         this->main_stream = h2opus_handle->getMainStream();
     }
 
+    SimpleHMatrixSampler(THMatrix<hw> &A, h2opusHandle_t h2opus_handle) : ownedA(0)
+    {
+        this->A = &A;
+        this->n = this->A->n;
+        this->h2opus_handle = h2opus_handle;
+        this->scale_A = 1;
+        this->identity_scale = 0;
+
+        this->one_norm_A = sampler_1_norm<H2Opus_Real, hw>(this, n, ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+        this->main_stream = h2opus_handle->getMainStream();
+    }
+
     void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
     {
         hgemv(H2Opus_NoTrans, scale_A, *A, input, n, 0, output, n, samples, h2opus_handle);
@@ -218,391 +262,86 @@ template <int hw> class SimpleHMatrixSampler : public BasicHMatrixSampler
     }
 };
 
-// CUSPARSE API is way too different from the MKL one, so we'll create separate samplers
-// and use template specialization instead
-template <int hw> class SparseSampler;
-
-/*
-template<>
-class SparseSampler<H2OPUS_HWTYPE_GPU> : public BasicHMatrixSampler {
-private:
-    typedef typename VectorContainer<H2OPUS_HWTYPE_GPU, int>::type IntVector;
-    typedef typename VectorContainer<H2OPUS_HWTYPE_GPU, H2Opus_Real>::type RealVector;
-
-    h2opusHandle_t h2opus_handle;
-
-    int n, nnz;
-    RealVector csrValA;
-    IntVector csrRowPtrA, csrColIndA;
-    H2Opus_Real one_norm_A;
-
-    RealVector input_buffer, output_buffer;
-    IntVector index_map;
-
-    cusparseHandle_t handle;
-    cudaStream_t stream;
-    cusparseSpMatDescr_t matA;
-    cusparseDnMatDescr_t mat_input, mat_output;
-    cudaDataType cdt;
-    bool initializedA, initializedB;
-
-    void* csrmm_worskpace;
-    size_t csrmm_ws_buffer_size;
-
-    void set_csrmm_ws(size_t bufferSize)
-    {
-        if(bufferSize != csrmm_ws_buffer_size)
-        {
-            csrmm_ws_buffer_size = bufferSize;
-            gpuErrchk( cudaFree(csrmm_worskpace) );
-            gpuErrchk( cudaMalloc(&csrmm_worskpace, csrmm_ws_buffer_size) );
-        }
-    }
-public:
-    SparseSampler(int n, int *index_map, h2opusHandle_t h2opus_handle)
-    {
-        this->n = n;
-        this->index_map = IntVector(index_map, index_map + n);
-        this->h2opus_handle = h2opus_handle;
-        this->stream = h2opus_handle->getKblasStream();
-
-#ifdef H2OPUS_USE_DOUBLE_PRECISION
-        this->cdt = CUDA_R_64F;
-#elif defined(H2OPUS_USE_SINGLE_PRECISION)
-        this->cdt = CUDA_R_32F;
-#endif
-        initializedA = initializedB = false;
-        csrmm_worskpace = NULL;
-        csrmm_ws_buffer_size = 0;
-    }
-
-    ~SparseSampler()
-    {
-        gpuCusparseErrchk( cusparseDestroy(handle) );
-
-        if(initializedA)
-            gpuCusparseErrchk( cusparseDestroySpMat(matA) );
-
-        if(initializedB)
-        {
-            gpuCusparseErrchk( cusparseDestroyDnMat(mat_input) );
-            gpuCusparseErrchk( cusparseDestroyDnMat(mat_output) );
-        }
-
-        if(csrmm_worskpace && csrmm_ws_buffer_size != 0)
-            gpuErrchk( cudaFree(csrmm_worskpace) );
-    }
-
-    void setSparseData(int* ia, int* ja, H2Opus_Real* val, int nnz)
-    {
-        if(initializedA)
-            gpuCusparseErrchk( cusparseDestroySpMat(matA) );
-
-        initializedA = true;
-
-        this->nnz  = nnz;
-        csrValA    = RealVector(val, val + nnz);
-        csrRowPtrA = IntVector(ia,  ia  + n+1);
-        csrColIndA = IntVector(ja,  ja  + nnz);
-
-        gpuCusparseErrchk( cusparseCreateCsr(
-            &matA, n, n, nnz, vec_ptr(csrRowPtrA), vec_ptr(csrColIndA), vec_ptr(csrValA),
-            CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, cdt
-        ) );
-
-        this->one_norm_A = sampler_1_norm<H2Opus_Real, H2OPUS_HWTYPE_GPU>(this, n, ONE_NORM_EST_MAX_SAMPLES,
-h2opus_handle);
-    }
-
-    void verifyBufferSizes(int samples)
-    {
-        if (input_buffer.size()  < n * samples) input_buffer.resize(n * samples);
-        if (output_buffer.size() < n * samples) output_buffer.resize(n * samples);
-    }
-
-    void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
-    {
-        verifyBufferSizes(samples);
-
-        // output = P*A*P^t*input
-        permute_vectors(input, vec_ptr(input_buffer), n, samples, vec_ptr(index_map), 1, H2OPUS_HWTYPE_GPU, stream);
-
-        // Initialize all the cusparse stuff
-        if(initializedB)
-        {
-            gpuCusparseErrchk( cusparseDestroyDnMat(mat_input) );
-            gpuCusparseErrchk( cusparseDestroyDnMat(mat_output) );
-        }
-
-        initializedB = true;
-
-        gpuCusparseErrchk( cusparseCreateDnMat(
-            &mat_input, n, samples, n, vec_ptr(input_buffer), cdt, CUSPARSE_ORDER_COL
-        ) );
-
-        gpuCusparseErrchk( cusparseCreateDnMat(
-            &mat_output, n, samples, n, vec_ptr(output_buffer), cdt, CUSPARSE_ORDER_COL
-        ) );
-
-        H2Opus_Real alpha = 1, beta = 0;
-
-        // Figure out if we need to resize the workspace buffer
-        size_t bufferSize;
-
-        gpuCusparseErrchk( cusparseSpMM_bufferSize(
-            handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            &alpha, matA, mat_input &beta, mat_output, cdt, CUSPARSE_CSRMM_ALG1, &bufferSize
-        ) );
-
-        set_csrmm_ws(bufferSize);
-
-        // execute the sparseMM
-        gpuCusparseErrchk( cusparseSpMM(
-            handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            &alpha, matA, mat_input &beta, mat_output, cdt, CUSPARSE_CSRMM_ALG1,
-            csrmm_worskpace
-        ) );
-
-        permute_vectors(vec_ptr(output_buffer), output, n, samples, vec_ptr(index_map), 0, H2OPUS_HWTYPE_GPU, stream);
-    }
-
-    int getMatrixDim()
-    {
-        return n;
-    }
-
-    H2Opus_Real get1Norm()
-    {
-        return one_norm_A;
-    }
-};
-*/
-
-#ifdef H2OPUS_USE_GPU
-
-template <> class SparseSampler<H2OPUS_HWTYPE_GPU> : public BasicHMatrixSampler
+template <int hw> class SquareSampler : public ExamplesSampler
 {
-#ifdef H2OPUS_USE_DOUBLE_PRECISION
-#define cusparse_csrmv cusparseDcsrmv
-#define cusparse_csrmm cusparseDcsrmm
-#elif defined(H2OPUS_USE_SINGLE_PRECISION)
-#define cusparse_csrmv cusparseScsrmv
-#define cusparse_csrmm cusparseScsrmm
-#endif
+    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
+
   private:
-    typedef typename VectorContainer<H2OPUS_HWTYPE_GPU, int>::type IntVector;
-    typedef typename VectorContainer<H2OPUS_HWTYPE_GPU, H2Opus_Real>::type RealVector;
-
-    h2opusHandle_t h2opus_handle;
-
-    int n, nnz;
-    RealVector csrValA;
-    IntVector csrRowPtrA, csrColIndA;
-
+    ExamplesSampler *A;
+    RealVector tempw;
     H2Opus_Real one_norm_A;
-    cusparseMatDescr_t descrA;
-
-    RealVector input_buffer, output_buffer;
-    IntVector index_map;
-
-    cusparseHandle_t handle;
-    h2opusComputeStream_t main_stream;
 
   public:
-    // Index map is assumed to be on the CPU
-    SparseSampler(int n, int *index_map, h2opusHandle_t h2opus_handle)
+    SquareSampler(ExamplesSampler &A, h2opusHandle_t h2opus_handle)
     {
-        this->n = n;
-        copyVector(this->index_map, index_map, n, H2OPUS_HWTYPE_CPU);
-        this->h2opus_handle = h2opus_handle;
-        this->main_stream = h2opus_handle->getMainStream();
-
-        gpuCusparseErrchk(cusparseCreate(&handle));
-        gpuCusparseErrchk(cusparseCreateMatDescr(&descrA));
-        gpuCusparseErrchk(cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL));
-        gpuCusparseErrchk(cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ZERO));
-    }
-
-    ~SparseSampler()
-    {
-        gpuCusparseErrchk(cusparseDestroy(handle));
-        gpuCusparseErrchk(cusparseDestroyMatDescr(descrA));
-    }
-
-    // Assumes data is on the CPU
-    void setSparseData(int *ia, int *ja, H2Opus_Real *val, int nnz)
-    {
-        this->nnz = nnz;
-        copyVector(csrValA, val, nnz, H2OPUS_HWTYPE_CPU);
-        copyVector(csrRowPtrA, ia, n + 1, H2OPUS_HWTYPE_CPU);
-        copyVector(csrColIndA, ja, nnz, H2OPUS_HWTYPE_CPU);
-
+        this->A = &A;
         this->one_norm_A =
-            sampler_1_norm<H2Opus_Real, H2OPUS_HWTYPE_GPU>(this, n, ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+            sampler_1_norm<H2Opus_Real, hw>(this, A.getMatrixDim(), ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
     }
 
-    void verifyBufferSizes(int samples)
+    virtual int getMatrixDim()
     {
-        if (input_buffer.size() < (size_t)n * samples)
-            input_buffer.resize(n * samples);
-        if (output_buffer.size() < (size_t)n * samples)
-            output_buffer.resize(n * samples);
+        return A->getMatrixDim();
+    }
+
+    virtual H2Opus_Real get1Norm()
+    {
+        return one_norm_A;
     }
 
     void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
     {
-        verifyBufferSizes(samples);
+        int n = getMatrixDim();
+        if (tempw.size() < (size_t)samples * n)
+            tempw.resize(samples * n);
 
-        // output = P*A*P^t*input
-        permute_vectors(input, vec_ptr(input_buffer), n, samples, vec_ptr(index_map), 1, H2OPUS_HWTYPE_GPU,
-                        main_stream);
-
-        // I give up! cusparse changes API too often
-        // TODO: Fix this to work with current version of cusparse
-
-        // H2Opus_Real alpha = 1, beta = 0;
-
-        // cusparse_csrmm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, n, samples, n, nnz, &alpha, descrA,
-        // vec_ptr(csrValA),
-        //                vec_ptr(csrRowPtrA), vec_ptr(csrColIndA), vec_ptr(input_buffer), n, &beta,
-        //                vec_ptr(output_buffer), n);
-
-        permute_vectors(vec_ptr(output_buffer), output, n, samples, vec_ptr(index_map), 0, H2OPUS_HWTYPE_GPU,
-                        main_stream);
-    }
-
-    int getMatrixDim()
-    {
-        return n;
-    }
-
-    H2Opus_Real get1Norm()
-    {
-        return one_norm_A;
+        A->sample(input, vec_ptr(tempw), samples);
+        A->sample(vec_ptr(tempw), output, samples);
     }
 };
-#endif
 
-#ifdef H2OPUS_USE_MKL
-
-template <> class SparseSampler<H2OPUS_HWTYPE_CPU> : public BasicHMatrixSampler
+template <int hw> class DiffSampler : public ExamplesSampler
 {
-#ifdef H2OPUS_USE_DOUBLE_PRECISION
-#define mkl_sparse_create_csr mkl_sparse_d_create_csr
-#define mkl_sparse_mm mkl_sparse_d_mm
-#elif defined(H2OPUS_USE_SINGLE_PRECISION)
-#define mkl_sparse_create_csr mkl_sparse_s_create_csr
-#define mkl_sparse_mm mkl_sparse_s_mm
-#endif
+    typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
+
   private:
-    typedef typename VectorContainer<H2OPUS_HWTYPE_CPU, int>::type IntVector;
-    typedef typename VectorContainer<H2OPUS_HWTYPE_CPU, H2Opus_Real>::type RealVector;
-
-    h2opusHandle_t h2opus_handle;
-    h2opusComputeStream_t main_stream;
-
-    int n, nnz;
-    RealVector csrValA;
-    IntVector csrRowPtrA, csrColIndA;
+    ExamplesSampler *A, *B;
+    RealVector tempw;
     H2Opus_Real one_norm_A;
-
-    sparse_matrix_t matA;
-    matrix_descr descrA;
-    bool initialized;
-
-    RealVector input_buffer, output_buffer;
-    IntVector index_map;
-
-    void destroySparseMat()
-    {
-        if (initialized)
-        {
-            sparse_status_t result = mkl_sparse_destroy(matA);
-
-            if (result != SPARSE_STATUS_SUCCESS)
-                printf("Error destroying sparse structure: %d\n", result);
-        }
-    }
+    h2opusComputeStream_t stream;
 
   public:
-    // Index map is assumed to be on the CPU
-    SparseSampler(int n, int *index_map, h2opusHandle_t h2opus_handle)
+    DiffSampler(ExamplesSampler &A, ExamplesSampler &B, h2opusHandle_t h2opus_handle)
     {
-        this->n = n;
-        copyVector(this->index_map, index_map, n, H2OPUS_HWTYPE_CPU);
-        this->h2opus_handle = h2opus_handle;
-        this->main_stream = h2opus_handle->getMainStream();
-
-        this->descrA.type = SPARSE_MATRIX_TYPE_GENERAL;
-
-        initialized = false;
-    }
-
-    ~SparseSampler()
-    {
-        destroySparseMat();
-    }
-
-    void setSparseData(int *ia, int *ja, H2Opus_Real *val, int nnz)
-    {
-        destroySparseMat();
-        initialized = true;
-
-        this->nnz = nnz;
-        copyVector(csrValA, val, nnz, H2OPUS_HWTYPE_CPU);
-        copyVector(csrRowPtrA, ia, n + 1, H2OPUS_HWTYPE_CPU);
-        copyVector(csrColIndA, ja, nnz, H2OPUS_HWTYPE_CPU);
-
-        sparse_status_t result = mkl_sparse_create_csr(&matA, SPARSE_INDEX_BASE_ZERO, n, n, vec_ptr(csrRowPtrA),
-                                                       vec_ptr(csrRowPtrA) + 1, vec_ptr(csrColIndA), vec_ptr(csrValA));
-
-        if (result != SPARSE_STATUS_SUCCESS)
-            printf("Error creating sparse structure: %d\n", result);
-
+        assert(A.getMatrixDim() == B.getMatrixDim());
+        this->A = &A;
+        this->B = &B;
         this->one_norm_A =
-            sampler_1_norm<H2Opus_Real, H2OPUS_HWTYPE_CPU>(this, n, ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+            sampler_1_norm<H2Opus_Real, hw>(this, A.getMatrixDim(), ONE_NORM_EST_MAX_SAMPLES, h2opus_handle);
+        this->stream = h2opus_handle->getMainStream();
     }
 
-    void verifyBufferSizes(int samples)
+    virtual int getMatrixDim()
     {
-        if (input_buffer.size() < (size_t)n * samples)
-            input_buffer.resize(n * samples);
-        if (output_buffer.size() < (size_t)n * samples)
-            output_buffer.resize(n * samples);
+        return A->getMatrixDim();
+    }
+
+    virtual H2Opus_Real get1Norm()
+    {
+        return one_norm_A;
     }
 
     void sample(H2Opus_Real *input, H2Opus_Real *output, int samples)
     {
-        verifyBufferSizes(samples);
+        int n = getMatrixDim();
+        if (tempw.size() < (size_t)samples * n)
+            tempw.resize(samples * n);
 
-        // output = P*A*P^t*input
-        permute_vectors(input, vec_ptr(input_buffer), n, samples, vec_ptr(index_map), 1, H2OPUS_HWTYPE_CPU,
-                        main_stream);
-
-        H2Opus_Real alpha = 1, beta = 0;
-
-        sparse_status_t result =
-            mkl_sparse_mm(SPARSE_OPERATION_NON_TRANSPOSE, alpha, matA, descrA, SPARSE_LAYOUT_COLUMN_MAJOR,
-                          vec_ptr(input_buffer), samples, n, beta, vec_ptr(output_buffer), n);
-
-        if (result != SPARSE_STATUS_SUCCESS)
-            printf("Error performing sparse MM: %d\n", result);
-
-        permute_vectors(vec_ptr(output_buffer), output, n, samples, vec_ptr(index_map), 0, H2OPUS_HWTYPE_CPU,
-                        main_stream);
-    }
-
-    int getMatrixDim()
-    {
-        return n;
-    }
-
-    H2Opus_Real get1Norm()
-    {
-        return one_norm_A;
+        A->sample(input, output, samples);
+        B->sample(input, vec_ptr(tempw), samples);
+        blas_axpy<H2Opus_Real, hw>(stream, n * samples, -1, vec_ptr(tempw), 1, output, 1);
     }
 };
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // Various Newton Schulz samplers
@@ -613,7 +352,7 @@ template <int hw> class HighOrderInversionSampler : public HMatrixSampler
 
   private:
     THMatrix<hw> *prev_iterate;
-    BasicHMatrixSampler *A;
+    ExamplesSampler *A;
 
     int n, ns_it, order;
 
@@ -624,7 +363,7 @@ template <int hw> class HighOrderInversionSampler : public HMatrixSampler
     RealVector S_buffer, R_buffer;
 
   public:
-    HighOrderInversionSampler(BasicHMatrixSampler *A, int order, h2opusHandle_t h2opus_handle)
+    HighOrderInversionSampler(ExamplesSampler *A, int order, h2opusHandle_t h2opus_handle)
     {
         this->A = A;
         this->n = A->getMatrixDim();
@@ -635,7 +374,7 @@ template <int hw> class HighOrderInversionSampler : public HMatrixSampler
         this->ns_it = 0;
     }
 
-    BasicHMatrixSampler *getA()
+    ExamplesSampler *getA()
     {
         return A;
     }
@@ -740,7 +479,7 @@ template <int hw> class NewtonSchultzSampler : public HMatrixSampler
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
 
   private:
-    BasicHMatrixSampler *A;
+    ExamplesSampler *A;
     THMatrix<hw> *prev_iterate;
 
     int n, ns_it;
@@ -750,7 +489,7 @@ template <int hw> class NewtonSchultzSampler : public HMatrixSampler
     RealVector temp_bufferA, temp_bufferB;
 
   public:
-    NewtonSchultzSampler(BasicHMatrixSampler *A, h2opusHandle_t h2opus_handle)
+    NewtonSchultzSampler(ExamplesSampler *A, h2opusHandle_t h2opus_handle)
     {
         this->A = A;
         this->n = A->getMatrixDim();
@@ -775,7 +514,7 @@ template <int hw> class NewtonSchultzSampler : public HMatrixSampler
             temp_bufferB.resize(n * samples);
     }
 
-    BasicHMatrixSampler *getA()
+    ExamplesSampler *getA()
     {
         return A;
     }
@@ -834,7 +573,7 @@ template <int hw> class UnrolledNewtonSchultzSampler : public HMatrixSampler
 
   private:
     THMatrix<hw> *prev_iterate;
-    BasicHMatrixSampler *A;
+    ExamplesSampler *A;
 
     int n;
 
@@ -860,7 +599,7 @@ template <int hw> class UnrolledNewtonSchultzSampler : public HMatrixSampler
     }
 
   public:
-    UnrolledNewtonSchultzSampler(BasicHMatrixSampler *A, int unrolls, h2opusHandle_t h2opus_handle)
+    UnrolledNewtonSchultzSampler(ExamplesSampler *A, int unrolls, h2opusHandle_t h2opus_handle)
     {
         this->A = A;
         this->n = A->getMatrixDim();
@@ -926,7 +665,7 @@ template <int hw> class UnrolledNewtonSchultzSampler : public HMatrixSampler
               h2opus_handle);
     }
 
-    BasicHMatrixSampler *getA()
+    ExamplesSampler *getA()
     {
         return A;
     }
@@ -937,7 +676,7 @@ template <int hw> class PinvNewtonSchultzSamplerPhaseA : public HMatrixSampler
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
 
   private:
-    BasicHMatrixSampler *A;
+    ExamplesSampler *A;
     THMatrix<hw> *Xk;
 
     int n;
@@ -948,7 +687,7 @@ template <int hw> class PinvNewtonSchultzSamplerPhaseA : public HMatrixSampler
     RealVector temp_bufferA, temp_bufferB;
 
   public:
-    PinvNewtonSchultzSamplerPhaseA(BasicHMatrixSampler *A, h2opusHandle_t h2opus_handle)
+    PinvNewtonSchultzSamplerPhaseA(ExamplesSampler *A, h2opusHandle_t h2opus_handle)
     {
         this->A = A;
         this->n = A->getMatrixDim();
@@ -1029,7 +768,7 @@ template <int hw> class PinvNewtonSchultzSamplerPhaseB : public HMatrixSampler
     typedef typename VectorContainer<hw, H2Opus_Real>::type RealVector;
 
   private:
-    BasicHMatrixSampler *A;
+    ExamplesSampler *A;
     THMatrix<hw> *Xk;
 
     int n;
@@ -1043,7 +782,7 @@ template <int hw> class PinvNewtonSchultzSamplerPhaseB : public HMatrixSampler
     RealVector S_buffer, R_buffer;
 
   public:
-    PinvNewtonSchultzSamplerPhaseB(BasicHMatrixSampler *A, h2opusHandle_t h2opus_handle)
+    PinvNewtonSchultzSamplerPhaseB(ExamplesSampler *A, h2opusHandle_t h2opus_handle)
     {
         this->A = A;
         this->n = A->getMatrixDim();

@@ -47,11 +47,10 @@ void hgemv_upsweep_leaves_template(H2Opus_Real alpha, TBasisTree<hw> &basis_tree
         vec_ptr(basis_tree.node_start), vec_ptr(basis_tree.node_len), m_batch, n_batch, k_batch, lda_batch, ldb_batch,
         ldc_batch, num_leaves, stream);
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, m_batch, n_batch,
-                                                             k_batch, leaf_rank, num_vectors, leaf_size, alpha,
-                                                             (const H2Opus_Real **)A_ptrs, lda_batch,
-                                                             (const H2Opus_Real **)B_ptrs, ldb_batch, (H2Opus_Real)0,
-                                                             C_ptrs, ldc_batch, num_leaves));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_Trans, H2Opus_NoTrans, m_batch, n_batch, k_batch, leaf_rank, num_vectors, leaf_size, alpha,
+        (const H2Opus_Real **)A_ptrs, lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch, (H2Opus_Real)0, C_ptrs,
+        ldc_batch, num_leaves));
 }
 
 template <int hw>
@@ -96,12 +95,10 @@ void hgemv_upsweep_level_template(TBasisTree<hw> &basis_tree, int level, int num
         H2Opus_Real beta = (i == 0 ? 0 : 1);
         H2Opus_Real alpha = 1;
 
-        check_kblas_error(
-            (H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, parent_rank, num_vectors,
-                                                   child_rank, alpha, (const H2Opus_Real **)A_ptrs + i * num_parents,
-                                                   child_rank, (const H2Opus_Real **)B_ptrs + i * num_parents,
-                                                   child_rank, beta, C_ptrs + i * num_parents, parent_rank,
-                                                   num_parents));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_Trans, H2Opus_NoTrans, parent_rank, num_vectors, child_rank, alpha,
+            (const H2Opus_Real **)A_ptrs + i * num_parents, child_rank, (const H2Opus_Real **)B_ptrs + i * num_parents,
+            child_rank, beta, C_ptrs + i * num_parents, parent_rank, num_parents));
     }
 }
 
@@ -151,11 +148,10 @@ void hgemv_downsweep_leaves_template(TBasisTree<hw> &basis_tree, H2Opus_Real *Y,
             leaf_level_start, vec_ptr(basis_tree.node_start), vec_ptr(basis_tree.node_len), m_batch, n_batch, k_batch,
             lda_batch, ldb_batch, ldc_batch, num_leaves, stream);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, m_batch,
-                                                                 n_batch, k_batch, leaf_size, num_vectors, leaf_rank,
-                                                                 (H2Opus_Real)1, (const H2Opus_Real **)A_ptrs,
-                                                                 lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch,
-                                                                 (H2Opus_Real)1, C_ptrs, ldc_batch, num_leaves));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, m_batch, n_batch, k_batch, leaf_size, num_vectors, leaf_rank,
+            (H2Opus_Real)1, (const H2Opus_Real **)A_ptrs, lda_batch, (const H2Opus_Real **)B_ptrs, ldb_batch,
+            (H2Opus_Real)1, C_ptrs, ldc_batch, num_leaves));
     }
 }
 
@@ -193,11 +189,10 @@ void hgemv_downsweep_level_template(TBasisTree<hw> &basis_tree, int num_vectors,
 
     H2Opus_Real beta = 1, alpha = 1;
 
-    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, child_rank,
-                                                             num_vectors, parent_rank, alpha,
-                                                             (const H2Opus_Real **)A_ptrs, child_rank,
-                                                             (const H2Opus_Real **)B_ptrs, parent_rank, beta, C_ptrs,
-                                                             child_rank, num_children));
+    check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+        stream, H2Opus_NoTrans, H2Opus_NoTrans, child_rank, num_vectors, parent_rank, alpha,
+        (const H2Opus_Real **)A_ptrs, child_rank, (const H2Opus_Real **)B_ptrs, parent_rank, beta, C_ptrs, child_rank,
+        num_children));
 }
 
 template <int hw>
@@ -255,11 +250,10 @@ void hgemv_mult_level_template(THNodeTree<hw> &hnodes, int level, int num_vector
 
         int batch_size = coupling_batch_ptr[batch_id + 1] - coupling_batch_ptr[batch_id];
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, hblas_trans_mode, H2Opus_NoTrans, node_size,
-                                                                 num_vectors, node_size, (H2Opus_Real)1,
-                                                                 (const H2Opus_Real **)A_batch, node_size,
-                                                                 (const H2Opus_Real **)B_batch, node_size,
-                                                                 (H2Opus_Real)1, C_batch, node_size, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, hblas_trans_mode, H2Opus_NoTrans, node_size, num_vectors, node_size, (H2Opus_Real)1,
+            (const H2Opus_Real **)A_batch, node_size, (const H2Opus_Real **)B_batch, node_size, (H2Opus_Real)1, C_batch,
+            node_size, batch_size));
     }
 }
 
@@ -348,11 +342,10 @@ void hgemv_denseMult_template(int hblas_trans_mode, H2Opus_Real alpha, THNodeTre
         int batch_size = dense_batch_ptr[batch_id + 1] - dense_batch_ptr[batch_id];
         H2Opus_Real batch_beta = (batch_id == 0 ? beta : 1);
 
-        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(stream, hblas_trans_mode, H2Opus_NoTrans, m_batch,
-                                                                 n_batch, k_batch, node_size, num_vectors, node_size,
-                                                                 alpha, (const H2Opus_Real **)A_batch, lda_batch,
-                                                                 (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
-                                                                 C_batch, ldc_batch, batch_size));
+        check_kblas_error((H2OpusBatched<H2Opus_Real, hw>::gemm)(
+            stream, hblas_trans_mode, H2Opus_NoTrans, m_batch, n_batch, k_batch, node_size, num_vectors, node_size,
+            alpha, (const H2Opus_Real **)A_batch, lda_batch, (const H2Opus_Real **)B_batch, ldb_batch, batch_beta,
+            C_batch, ldc_batch, batch_size));
     }
 }
 
@@ -434,7 +427,6 @@ void hgemv_template(int trans, H2Opus_Real alpha, THMatrix<hw> &hmatrix, H2Opus_
     timer.init();
     timer.start();
 #endif
-
     // Dense multiplication phsae
     hgemv_denseMult_template<hw>(trans, alpha, hmatrix.hnodes, X, ldx, beta, Y, ldy, num_vectors, u_basis_tree,
                                  v_basis_tree, workspace, low_priority_stream);

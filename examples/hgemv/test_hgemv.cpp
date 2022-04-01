@@ -25,6 +25,7 @@ int main(int argc, char **argv)
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool check_approx_err = arg_parser.flag("c", "check_approx_err", "Check the approximation error", false);
     bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
+    bool print_dense = arg_parser.flag("d", "print_dense", "Print dense matrix to standard output", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
     if (!arg_parser.valid() || print_help)
@@ -127,6 +128,15 @@ int main(int argc, char **argv)
         printf("CPU Max approx error = %e\n", max_approx_err);
     }
 
+    // Convert to dense output
+    if (print_dense)
+    {
+        H2Opus_Real *dmat = (H2Opus_Real *)malloc(n * n * sizeof(H2Opus_Real));
+        expandHmatrix(hmatrix, dmat);
+        printDenseMatrix(dmat, n, n, n, 8, NULL);
+        free(dmat);
+    }
+
 #ifdef H2OPUS_USE_GPU
     // Test hgemv on the GPU and compare with the CPU results
     thrust::device_vector<H2Opus_Real> gpu_x = x, gpu_y;
@@ -144,10 +154,6 @@ int main(int argc, char **argv)
     {
         fillArray(vec_ptr(gpu_y), n * num_vectors, 0, h2opus_handle->getMainStream(), H2OPUS_HWTYPE_GPU);
         hgemv(H2Opus_NoTrans, alpha, gpu_h, vec_ptr(gpu_x), n, beta, vec_ptr(gpu_y), n, num_vectors, h2opus_handle);
-        printf("GPU x\n");
-        printThrustVector(gpu_x);
-        printf("GPU y\n");
-        printThrustVector(gpu_y);
     }
     HLibProfile::getHgemvPerf(total_gops, total_time, total_perf, total_dev);
     printf("GPU Total execution time: %f s at %f (Gflop/s) (%.3f dev)\n", total_time, total_perf, total_dev);

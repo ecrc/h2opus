@@ -97,21 +97,19 @@ void construct_tlr_matrix(TTLR_Matrix<T, hw> &A, FunctionGen &func_gen, T eps, h
         // Copy over the orthogonal factors from the temp blocks to the tlr matrix
         T **col_block_U_ptrs = vec_ptr(A.block_U_ptrs) + block_row_start + col * n_block;
 
-        check_kblas_error((H2OpusBatched<T, hw>::copyBlock)(stream, vec_ptr(block_size_array), block_ranks_ptr,
-                                                            block_size, max_rank, col_block_U_ptrs,
-                                                            vec_ptr(block_size_array), vec_ptr(temp_block_ptrs),
-                                                            vec_ptr(block_size_array), blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::copyBlock)(
+            stream, vec_ptr(block_size_array), block_ranks_ptr, block_size, max_rank, col_block_U_ptrs,
+            vec_ptr(block_size_array), vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), blockCount));
 
         // Set each V factor as the projection of the original dense block into the orthogonal U factor
         // i.e. V' = U' * M for each block M or V = M' * U
         T **col_block_V_ptrs = vec_ptr(A.block_V_ptrs) + block_row_start + col * n_block;
 
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(block_size_array),
-                                                       block_ranks_ptr, vec_ptr(block_size_array), block_size, max_rank,
-                                                       block_size, (T)1, (const T **)(vec_ptr(original_block_ptrs)),
-                                                       vec_ptr(block_size_array), (const T **)col_block_U_ptrs,
-                                                       vec_ptr(block_size_array), (T)0, col_block_V_ptrs,
-                                                       vec_ptr(block_size_array), blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(block_size_array), block_ranks_ptr, vec_ptr(block_size_array),
+            block_size, max_rank, block_size, (T)1, (const T **)(vec_ptr(original_block_ptrs)),
+            vec_ptr(block_size_array), (const T **)col_block_U_ptrs, vec_ptr(block_size_array), (T)0, col_block_V_ptrs,
+            vec_ptr(block_size_array), blockCount));
     }
 }
 
@@ -208,16 +206,14 @@ void construct_spd_tlr_matrix(TTLR_Matrix<T, hw> &A, FunctionGen &func_gen, T ep
         //     hw);
         // }
 
-        check_kblas_error((
-            H2OpusBatched<T, hw>::trsm)(stream, H2Opus_Left, H2Opus_Lower, H2Opus_NoTrans, H2Opus_NonUnit,
-                                        vec_ptr(block_size_array), vec_ptr(block_size_array), block_size, block_size, 1,
-                                        vec_ptr(factored_diagonal_ptrs) + block_row_start, vec_ptr(block_size_array),
-                                        vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), blockCount));
-        check_kblas_error((H2OpusBatched<T, hw>::trsm)(stream, H2Opus_Right, H2Opus_Lower, H2Opus_Trans, H2Opus_NonUnit,
-                                                       vec_ptr(block_size_array), vec_ptr(block_size_array), block_size,
-                                                       block_size, 1, vec_ptr(factored_diagonal_ptrs_j),
-                                                       vec_ptr(block_size_array), vec_ptr(temp_block_ptrs),
-                                                       vec_ptr(block_size_array), blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::trsm)(
+            stream, H2Opus_Left, H2Opus_Lower, H2Opus_NoTrans, H2Opus_NonUnit, vec_ptr(block_size_array),
+            vec_ptr(block_size_array), block_size, block_size, 1, vec_ptr(factored_diagonal_ptrs) + block_row_start,
+            vec_ptr(block_size_array), vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::trsm)(
+            stream, H2Opus_Right, H2Opus_Lower, H2Opus_Trans, H2Opus_NonUnit, vec_ptr(block_size_array),
+            vec_ptr(block_size_array), block_size, block_size, 1, vec_ptr(factored_diagonal_ptrs_j),
+            vec_ptr(block_size_array), vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), blockCount));
 
         // if(col == 0)
         // {
@@ -261,33 +257,30 @@ void construct_spd_tlr_matrix(TTLR_Matrix<T, hw> &A, FunctionGen &func_gen, T ep
 
         // Set each V factor as the projection of the original dense block into the orthogonal U factor
         // i.e. V' = U' * M for each block M or V = M' * U
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(block_size_array),
-                                                       block_ranks_ptr, vec_ptr(block_size_array), block_size, max_rank,
-                                                       block_size, (T)1, (const T **)(vec_ptr(original_block_ptrs)),
-                                                       vec_ptr(block_size_array), (const T **)vec_ptr(temp_block_ptrs),
-                                                       vec_ptr(block_size_array), (T)0, vec_ptr(projected_block_ptrs),
-                                                       vec_ptr(block_size_array), blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_Trans, H2Opus_NoTrans, vec_ptr(block_size_array), block_ranks_ptr, vec_ptr(block_size_array),
+            block_size, max_rank, block_size, (T)1, (const T **)(vec_ptr(original_block_ptrs)),
+            vec_ptr(block_size_array), (const T **)vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), (T)0,
+            vec_ptr(projected_block_ptrs), vec_ptr(block_size_array), blockCount));
 
         // U(i, j) = L_i * U(i, j) and V(i, j) = L_j * V(i, j)
         T **col_block_U_ptrs = vec_ptr(A.block_U_ptrs) + block_row_start + col * n_block;
 
-        check_kblas_error(
-            (H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, vec_ptr(block_size_array),
-                                         block_ranks_ptr, vec_ptr(block_size_array), block_size, max_rank, block_size,
-                                         (T)1, (const T **)(vec_ptr(factored_diagonal_ptrs) + block_row_start),
-                                         vec_ptr(block_size_array), (const T **)vec_ptr(temp_block_ptrs),
-                                         vec_ptr(block_size_array), (T)0, col_block_U_ptrs, vec_ptr(block_size_array),
-                                         blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, vec_ptr(block_size_array), block_ranks_ptr,
+            vec_ptr(block_size_array), block_size, max_rank, block_size, (T)1,
+            (const T **)(vec_ptr(factored_diagonal_ptrs) + block_row_start), vec_ptr(block_size_array),
+            (const T **)vec_ptr(temp_block_ptrs), vec_ptr(block_size_array), (T)0, col_block_U_ptrs,
+            vec_ptr(block_size_array), blockCount));
 
         T **col_block_V_ptrs = vec_ptr(A.block_V_ptrs) + block_row_start + col * n_block;
 
-        check_kblas_error(
-            (H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, vec_ptr(block_size_array),
-                                         block_ranks_ptr, vec_ptr(block_size_array), block_size, max_rank, block_size,
-                                         (T)1, (const T **)(vec_ptr(factored_diagonal_ptrs_j)),
-                                         vec_ptr(block_size_array), (const T **)vec_ptr(projected_block_ptrs),
-                                         vec_ptr(block_size_array), (T)0, col_block_V_ptrs, vec_ptr(block_size_array),
-                                         blockCount));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, vec_ptr(block_size_array), block_ranks_ptr,
+            vec_ptr(block_size_array), block_size, max_rank, block_size, (T)1,
+            (const T **)(vec_ptr(factored_diagonal_ptrs_j)), vec_ptr(block_size_array),
+            (const T **)vec_ptr(projected_block_ptrs), vec_ptr(block_size_array), (T)0, col_block_V_ptrs,
+            vec_ptr(block_size_array), blockCount));
 
         // if(col == 0)
         // {

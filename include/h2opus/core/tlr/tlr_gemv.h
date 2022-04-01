@@ -23,10 +23,9 @@ void tlr_gemv_dense(int trans, T alpha, TTLR_Matrix<T, hw> &A, T *X, int ldx, T 
     tlr_gemv_marshal_dense<T, hw>(block_size, X, ldx, Y, ldy, num_vectors, input_ptrs, output_ptrs, rows_batch,
                                   col_batch, num_vec_batch, bs_batch, ldx_batch, ldy_batch, n_block, stream);
 
-    check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, trans, H2Opus_NoTrans, rows_batch, num_vec_batch, col_batch,
-                                                   block_size, num_vectors, block_size, alpha, (const T **)block_ptrs,
-                                                   bs_batch, (const T **)input_ptrs, ldx_batch, beta, output_ptrs,
-                                                   ldy_batch, n_block));
+    check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+        stream, trans, H2Opus_NoTrans, rows_batch, num_vec_batch, col_batch, block_size, num_vectors, block_size, alpha,
+        (const T **)block_ptrs, bs_batch, (const T **)input_ptrs, ldx_batch, beta, output_ptrs, ldy_batch, n_block));
 }
 
 template <class T, bool transpose, int hw>

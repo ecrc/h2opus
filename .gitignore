@@ -5,6 +5,8 @@ lib/*
 pkg.gitcommit
 make.inc
 h2opus.scanbuild/
+src/bindings/python/__pycache__/
+src/bindings/python/*.so
 include/h2opusconf.h
 examples/hara/test_hara
 examples/hgemv/test_hgemv

@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     int dim = arg_parser.option<int>("dim", "dim", "The geometrical dimension", 2);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool check_approx_err = arg_parser.flag("ca", "check_approx_err", "Check the approximation error", false);
-    bool check_compress_err = arg_parser.flag("c", "check_approx_err", "Check the compression error", false);
+    bool check_compress_err = arg_parser.flag("c", "check_compression_err", "Check the compression error", false);
     bool summary = arg_parser.flag("summary", "summary", "Print brief summary", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 

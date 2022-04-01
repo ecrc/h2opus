@@ -726,18 +726,16 @@ void dumpCouplingMatrices(HMatrix &hmatrix, int digits, FILE *fp)
             int u_1 = u_basis_tree.node_start[u_index], v_1 = v_basis_tree.node_start[v_index];
             int u_2 = u_1 + u_basis_tree.node_len[u_index] - 1, v_2 = v_1 + v_basis_tree.node_len[v_index] - 1;
 
-            fprintf(fp, "\tNode %d Tree Index: %d : [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
-            fprintf(fp, "\n");
+            fprintf(fp, "\tNode %d Tree Index: %d : [%d, %d] x [%d, %d]\n", leaf, tree_index, u_1, u_2, v_1, v_2);
             for (int i = 0; i < rank; i++)
             {
+                fprintf(fp, "\t\t");
                 for (int j = 0; j < rank; j++)
                 {
                     int local_index = i + j * rank;
                     fprintf(fp, format, entries[local_index]);
                 }
                 fprintf(fp, "\n");
-                if (i != rank - 1)
-                    fprintf(fp, "\t\t");
             }
         }
     }
@@ -905,16 +903,15 @@ void dumpTransferLevel(BasisTree &basis_tree, int digits, int level)
         H2Opus_Real *utrans = basis_tree.getTransNode(level, node - level_start);
         int node_start = basis_tree.node_start[node], node_end = node_start + basis_tree.node_len[node];
 
-        printf("\tNode %d Level %d [%d; %d]\n\t\t", node, level, node_start, node_end);
+        printf("\tNode %d Level %d [%d; %d]\n", node, level, node_start, node_end);
         for (int i = 0; i < rows; i++)
         {
+            printf("\t\t");
             for (int j = 0; j < cols; j++)
             {
                 printf(format, utrans[i + j * rows]);
             }
             printf("\n");
-            if (i != rows - 1)
-                printf("\t\t");
         }
     }
 }
@@ -931,26 +928,27 @@ void dumpBasisTree(BasisTree &basis_tree, int digits, const char *label, FILE *f
     fprintf(fp, "]\n");
 
     fprintf(fp, "%s Basis [\n", label);
-    int leaf_start = basis_tree.getLevelStart(basis_tree.depth - 1);
-    int leaf_rank = basis_tree.getLevelRank(basis_tree.depth - 1);
+    int leaf_start = basis_tree.depth ? basis_tree.getLevelStart(basis_tree.depth - 1) : 0;
+    int leaf_rank = basis_tree.depth ? basis_tree.getLevelRank(basis_tree.depth - 1) : 0;
     int ld = basis_tree.leaf_size;
-
     for (int leaf = 0; leaf < basis_tree.basis_leaves; leaf++)
     {
         int node_id = leaf + leaf_start;
-        fprintf(fp, "\tNode %d: [%d; %d] \n\t\t", node_id, basis_tree.node_start[node_id],
-                basis_tree.node_start[node_id] + basis_tree.node_len[node_id]);
+        fprintf(fp, "\tNode %d: [%d; %d] (leaf_rank %d)\n", node_id, basis_tree.node_start[node_id],
+                basis_tree.node_start[node_id] + basis_tree.node_len[node_id], leaf_rank);
         H2Opus_Real *u_leaf = basis_tree.getBasisLeaf(leaf);
 
-        for (int i = 0; i < basis_tree.node_len[node_id]; i++)
+        if (leaf_rank)
         {
-            for (int j = 0; j < leaf_rank; j++)
+            for (int i = 0; i < basis_tree.node_len[node_id]; i++)
             {
-                fprintf(fp, format, u_leaf[i + j * ld]);
-            }
-            fprintf(fp, "\n");
-            if (i != basis_tree.node_len[node_id] - 1)
                 fprintf(fp, "\t\t");
+                for (int j = 0; j < leaf_rank; j++)
+                {
+                    fprintf(fp, format, u_leaf[i + j * ld]);
+                }
+                fprintf(fp, "\n");
+            }
         }
     }
     fprintf(fp, "]\n");
@@ -979,17 +977,16 @@ void dumpHMatrix(HMatrix &hmatrix, int digits, FILE *fp)
 
         int ld = hmatrix.u_basis_tree.leaf_size;
 
-        fprintf(fp, "\tNode %d (%d): [%d, %d] x [%d, %d]\n\t\t", leaf, tree_index, u_1, u_2, v_1, v_2);
+        fprintf(fp, "\tNode %d (%d): [%d, %d] x [%d, %d]\n", leaf, tree_index, u_1, u_2, v_1, v_2);
         for (int i = u_1; i <= u_2; i++)
         {
+            fprintf(fp, "\t\t");
             for (int j = v_1; j <= v_2; j++)
             {
                 int local_index = (i - u_1) + (j - v_1) * ld;
                 fprintf(fp, format, m[local_index]);
             }
             fprintf(fp, "\n");
-            if (i != u_2)
-                fprintf(fp, "\t\t");
         }
     }
     fprintf(fp, "];\n");

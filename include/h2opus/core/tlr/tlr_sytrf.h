@@ -227,11 +227,10 @@ void tlr_sytrf_sample_lru(TTLR_Matrix<T, hw> &A, T *D, int k, int *row_indices, 
 
         // T2 = V_kj * T1
         // printf("Sampling Vkj\n");
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch,
-                                                       samples_i_batch, rank_kj_batch, block_size, max_samples,
-                                                       max_rank_kj, (T)1, (const T **)Vkj_ptrs, bs_batch,
-                                                       (const T **)T1_ptrs, max_rank_batch, 0, T2_ptrs, bs_batch,
-                                                       sample_block_count));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, samples_i_batch, rank_kj_batch, block_size, max_samples,
+            max_rank_kj, (T)1, (const T **)Vkj_ptrs, bs_batch, (const T **)T1_ptrs, max_rank_batch, 0, T2_ptrs,
+            bs_batch, sample_block_count));
 
         // T2 = D_jj * T2
         check_kblas_error((H2OpusBatched<T, hw>::diagLeftMult)(stream, bs_batch, samples_i_batch, block_size,
@@ -247,11 +246,10 @@ void tlr_sytrf_sample_lru(TTLR_Matrix<T, hw> &A, T *D, int k, int *row_indices, 
 
         // T4 += U_ij * T3
         // printf("Sampling Uij\n");
-        check_kblas_error((H2OpusBatched<T, hw>::gemm)(stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch,
-                                                       samples_i_batch, rank_ij_batch, block_size, max_samples,
-                                                       max_rank_ij, (T)1, (const T **)Uij_ptrs, bs_batch,
-                                                       (const T **)T3_ptrs, max_rank_batch, T4_beta, T4_ptrs, bs_batch,
-                                                       sample_block_count));
+        check_kblas_error((H2OpusBatched<T, hw>::gemm)(
+            stream, H2Opus_NoTrans, H2Opus_NoTrans, bs_batch, samples_i_batch, rank_ij_batch, block_size, max_samples,
+            max_rank_ij, (T)1, (const T **)Uij_ptrs, bs_batch, (const T **)T3_ptrs, max_rank_batch, T4_beta, T4_ptrs,
+            bs_batch, sample_block_count));
 
         sampled_block_cols += block_columns;
         T4_beta = 1;

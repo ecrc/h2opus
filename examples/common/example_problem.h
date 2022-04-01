@@ -45,6 +45,19 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
         assert(dim < dimension && idx < num_points);
         return pts[dim][idx];
     }
+
+    std::vector<T> getCoords()
+    {
+        std::vector<T> outpts;
+        outpts.resize(dimension * num_points);
+        for (size_t j = 0; j < num_points; j++)
+        {
+            for (int d = 0; d < dimension; d++)
+                outpts[dimension * j + d] = getDataPoint(j, d);
+        }
+
+        return outpts;
+    }
 };
 
 template <class T> T getCorrelationLength(int dim)
@@ -56,6 +69,7 @@ template <class T> T getCorrelationLength(int dim)
 }
 
 // This is an example of a functor that evaluates the kernel
+// K(x,y) = || x - y ||
 template <class T> class FunctionGen
 {
   private:
@@ -76,6 +90,28 @@ template <class T> class FunctionGen
             diff += (pt_x[d] - pt_y[d]) * (pt_x[d] - pt_y[d]);
         T dist = sqrt(diff);
         return exp(-dist / l);
+    }
+};
+
+// This is an example of a functor that evaluates the kernel
+// K(x,y) = x[0] if x == y else 0.0
+template <class T> class DiagGen
+{
+  private:
+    int dim;
+
+  public:
+    DiagGen(int dim)
+    {
+        this->dim = dim;
+    }
+
+    T operator()(T *pt_x, T *pt_y)
+    {
+        T diff = 0;
+        for (int d = 0; d < dim; d++)
+            diff += (pt_x[d] - pt_y[d]) * (pt_x[d] - pt_y[d]);
+        return diff > 0.0 ? 0.0 : pt_x[0];
     }
 };
 
