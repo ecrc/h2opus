@@ -106,6 +106,7 @@ int main(int argc, char **argv)
     ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
     ierr = KSPSetType(ksp,KSPCG);CHKERRQ(ierr);
     ierr = KSPSetOperators(ksp,A,A);CHKERRQ(ierr);
+    if (trunc_eps > 0) { ierr = KSPSetTolerances(ksp, trunc_eps, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT);CHKERRQ(ierr); }
     ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
     ierr = KSPSetUp(ksp);CHKERRQ(ierr);
     ierr = KSPSetUpOnBlocks(ksp);CHKERRQ(ierr);
