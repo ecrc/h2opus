@@ -3,6 +3,8 @@
 
 #include <thrust/random.h>
 #include <h2opus.h>
+#include <iostream>
+#include <fstream>
 
 #define DEFAULT_ETA 1.0
 
@@ -62,6 +64,23 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
         }
 
         return outpts;
+    }
+
+    void dump(const char *filename = NULL)
+    {
+        std::ofstream ofile(filename ? filename : "point_cloud.txt");
+        if (ofile.is_open())
+        {
+            ofile << "dim =" << this->dimension << std::endl;
+            ofile << "np = " << this->num_points << std::endl;
+            for (size_t i = 0; i < this->num_points; i++)
+            {
+                for (int d = 0; d < this->dimension; d++)
+                    ofile << pts[d][i] << " ";
+                ofile << std::endl;
+            }
+            ofile.close();
+        }
     }
 };
 
