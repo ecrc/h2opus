@@ -59,8 +59,8 @@ int main(int argc, char **argv)
     // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
     BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
 
-    //DiagGen<H2Opus_Real> func_gen(dim);
-    //BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
+    // DiagGen<H2Opus_Real> func_gen(dim);
+    // BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
 
     // Create the admissibility condition using the eta parameter
     // Decreasing eta refines the matrix tree and increasing it coarsens the tree
@@ -114,9 +114,11 @@ int main(int argc, char **argv)
         H2Opus_Real *U_update = vec_ptr(U) + applied_rank * ldu;
         H2Opus_Real *V_update = vec_ptr(V) + applied_rank * ldv;
 
-        // apply twice to check for difference below
-        hlru_global(hmatrix, U_update, ldu, V_update, ldv, rank_to_apply, 0.5, h2opus_handle);
-        hlru_global(hmatrix, U_update, ldu, V_update, ldv, rank_to_apply, 0.5, h2opus_handle);
+        // apply n times up to 1.0 as scaling factor
+        for (int napp = 0; napp < 8; napp++)
+        {
+            hlru_global(hmatrix, U_update, ldu, V_update, ldv, rank_to_apply, 0.125, h2opus_handle);
+        }
 
         applied_rank += rank_to_apply;
     }
@@ -149,9 +151,11 @@ int main(int argc, char **argv)
         H2Opus_Real *U_update = vec_ptr(d_U) + applied_rank * ldu;
         H2Opus_Real *V_update = vec_ptr(d_V) + applied_rank * ldv;
 
-        // apply twice to check for difference below
-        hlru_global(hmatrix, U_update, ldu, V_update, ldv, rank_to_apply, 0.5, h2opus_handle);
-        hlru_global(hmatrix, U_update, ldu, V_update, ldv, rank_to_apply, 0.5, h2opus_handle);
+        // apply n times up to 1.0 as scaling factor
+        for (int napp = 0; napp < 8; napp++)
+        {
+            hlru_global(gpu_h, U_update, ldu, V_update, ldv, rank_to_apply, 0.125, h2opus_handle);
+        }
 
         applied_rank += rank_to_apply;
     }

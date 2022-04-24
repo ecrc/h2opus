@@ -77,8 +77,8 @@ int main(int argc, char **argv)
     // Create an entry gen struct from the functor. Currently only supports chebyshev interpolation on the CPU
     BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, FunctionGen<H2Opus_Real>> entry_gen(func_gen);
 
-    //DiagGen<H2Opus_Real> func_gen(dim);
-    //BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
+    // DiagGen<H2Opus_Real> func_gen(dim);
+    // BoxEntryGen<H2Opus_Real, H2OPUS_HWTYPE_CPU, DiagGen<H2Opus_Real>> entry_gen(func_gen);
 
     // Create the admissibility condition using the eta parameter
     // Decreasing eta refines the matrix tree and increasing it coarsens the tree
