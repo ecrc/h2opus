@@ -26,6 +26,8 @@ int main(int argc, char **argv)
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool check_compress_err = arg_parser.flag("c", "check_compress_err", "Check the compression error", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
+    bool check_recompress = arg_parser.flag("cr", "check_recompress", "keep compressing the same matrix", false);
+    int nruns = arg_parser.option<int>("n", "nruns", "Number of runs to perform", 10);
 
     if (!arg_parser.valid() || print_help)
     {
@@ -93,14 +95,16 @@ int main(int argc, char **argv)
     double total_gops, total_time, total_perf, total_dev;
 
     // CPU runs
-    const int runs = 10;
-
     HLibProfile::clear();
-    for (int i = 0; i < runs; i++)
+    for (int i = 0; i < nruns; i++)
     {
-        hmatrix = original_hmatrix;
+        double te = trunc_eps;
+        if (!check_recompress)
+            hmatrix = original_hmatrix;
+        else
+            te = trunc_eps * pow(10, i);
         horthog(hmatrix, h2opus_handle);
-        hcompress(hmatrix, trunc_eps, h2opus_handle);
+        hcompress(hmatrix, te, h2opus_handle);
     }
 
     HLibProfile::getPhasePerformance(HLibProfile::HCOMPRESS_BASIS_GEN, gather_gflops, gather_time, gather_perf,
@@ -138,11 +142,15 @@ int main(int argc, char **argv)
 
     HLibProfile::clear();
     // Orthogonalize and compress
-    for (int i = 0; i < runs; i++)
+    for (int i = 0; i < nruns; i++)
     {
-        gpu_h = original_hmatrix;
+        double te = trunc_eps;
+        if (!check_recompress)
+            gpu_h = original_hmatrix;
+        else
+            te = trunc_eps * pow(10, i);
         horthog(gpu_h, h2opus_handle);
-        hcompress(gpu_h, trunc_eps, h2opus_handle);
+        hcompress(gpu_h, te, h2opus_handle);
     }
 
     HLibProfile::getPhasePerformance(HLibProfile::HCOMPRESS_BASIS_GEN, gather_gflops, gather_time, gather_perf,
