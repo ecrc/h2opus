@@ -60,11 +60,11 @@ static PetscErrorCode BuildA(MPI_Comm comm, PointCloud<H2Opus_Real>& pt_cloud, F
     // Create the PETSc matrix
     std::vector<PetscScalar> coords = pt_cloud.getCoordsV();
     Mat A;
-    ierr = MatCreateH2OpusFromKernel(comm,                       // the communicator associated to the matrix
-                                     PETSC_DECIDE, PETSC_DECIDE, n, n,       // local and global sizes
-                                     dim, coords.data(), PETSC_FALSE, // point coordinates
-                                     petsc_kernel, &fdgen,                // kernel
-                                     eta, leafsize, cheb_grid_pts,                  // construction parameters (can be also selected at runtime from PETSc)
+    ierr = MatCreateH2OpusFromKernel(comm,                             // the communicator associated to the matrix
+                                     PETSC_DECIDE, PETSC_DECIDE, n, n, // local and global sizes
+                                     dim, coords.data(), PETSC_FALSE,  // point coordinates
+                                     petsc_kernel, &fdgen,             // kernel
+                                     eta, leafsize, cheb_grid_pts,     // construction parameters (can be also selected at runtime from PETSc)
                                      &A);CHKERRQ(ierr);
 
     ierr = MatBindToCPU(A,forcecpu);CHKERRQ(ierr);
@@ -132,11 +132,11 @@ static PetscErrorCode BuildD(Mat A, PointCloud<H2Opus_Real>& pt_cloud, FDGen<H2O
     // Create the PETSc matrix
     Mat Ao;
     std::vector<PetscScalar> coords = opt_cloud->getCoordsV();
-    ierr = MatCreateH2OpusFromKernel(PetscObjectComm((PetscObject)A),       // the MPI communicator associated to the matrix
-                                     PETSC_DECIDE, PETSC_DECIDE, no, no,    // local and global sizes
-                                     dim,  coords.data(), PETSC_FALSE,      // point coordinates
-                                     petsc_kernel, &fdgen,                  // kernel
-                                     eta, leafsize, cheb_grid_pts,          // construction parameters (can be also selected at runtime from PETSc)
+    ierr = MatCreateH2OpusFromKernel(PetscObjectComm((PetscObject)A),    // the MPI communicator associated to the matrix
+                                     PETSC_DECIDE, PETSC_DECIDE, no, no, // local and global sizes
+                                     dim,  coords.data(), PETSC_FALSE,   // point coordinates
+                                     petsc_kernel, &fdgen,               // kernel
+                                     eta, leafsize, cheb_grid_pts,       // construction parameters (can be also selected at runtime from PETSc)
                                      &Ao);CHKERRQ(ierr);
 
     // Always bind this larger matrix to run on the CPU boundedness

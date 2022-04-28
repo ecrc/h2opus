@@ -70,11 +70,11 @@ int main(int argc, char **argv)
     ierr = PetscLogStagePush(astage);CHKERRQ(ierr);
     Mat A;
     std::vector<PetscScalar> coords = pt_cloud.getCoords();
-    ierr = MatCreateH2OpusFromKernel(PETSC_COMM_WORLD,                   // the MPI communicator associated to the matrix
-                                     PETSC_DECIDE, PETSC_DECIDE, n, n,   // local and global sizes
-                                     dim, coords.data(), PETSC_FALSE,    // point coordinates
-                                     petsc_kernel, &kgen,                // kernel
-                                     eta, m, cheb_grid_pts,              // construction parameters (can be also selected at runtime from PETSc)
+    ierr = MatCreateH2OpusFromKernel(PETSC_COMM_WORLD,                 // the MPI communicator associated to the matrix
+                                     PETSC_DECIDE, PETSC_DECIDE, n, n, // local and global sizes
+                                     dim, coords.data(), PETSC_FALSE,  // point coordinates
+                                     petsc_kernel, &kgen,              // kernel
+                                     eta, m, cheb_grid_pts,            // construction parameters (can be also selected at runtime from PETSc)
                                      &A);CHKERRQ(ierr);
     ierr = MatSetOptionsPrefix(A,"cov_");CHKERRQ(ierr);
     ierr = MatBindToCPU(A,forcecpu);CHKERRQ(ierr);
