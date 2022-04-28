@@ -193,15 +193,15 @@ int main(int argc, char **argv)
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Geometry generation
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    size_t n = grid_x * grid_y;
-    printf("N = %d\n", (int)n);
     // Create point cloud
-    int dim = (grid_y == 1 ? 1 : 2);
-    PointCloud<H2Opus_Real> pt_cloud(dim, n);
-    if (dim == 1)
-        generate1DGrid<H2Opus_Real>(pt_cloud, grid_x, -D, D);
-    else
+    PointCloud<H2Opus_Real> pt_cloud;
+    if (grid_y > 1)
         generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, -D, D, -D, D);
+    else
+        generate1DGrid<H2Opus_Real>(pt_cloud, grid_x, -D, D);
+    int dim = pt_cloud.getDimension();
+    size_t n = pt_cloud.getDataSetSize();
+    printf("N = %d\n", (int)n);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Matrix construction

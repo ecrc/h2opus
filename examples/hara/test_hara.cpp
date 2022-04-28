@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     printf("N = %d\n", (int)n);
     // Create point cloud
     int dim = (grid_z == 1 ? (grid_y == 1 ? 1 : 2) : 3);
-    PointCloud<H2Opus_Real> pt_cloud(dim, n);
+    PointCloud<H2Opus_Real> pt_cloud;
     if (dim == 3)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
     else if (dim == 2)

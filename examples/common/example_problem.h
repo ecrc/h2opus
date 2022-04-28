@@ -3,6 +3,8 @@
 
 #include <thrust/random.h>
 #include <h2opus.h>
+#include <iostream>
+#include <fstream>
 
 #define DEFAULT_ETA 1.0
 
@@ -21,6 +23,11 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
     }
 
     PointCloud(int dim, size_t num_pts)
+    {
+        resize(dim, num_pts);
+    }
+
+    void resize(int dim, size_t num_pts)
     {
         this->dimension = dim;
         this->num_points = num_pts;
@@ -57,6 +64,23 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
         }
 
         return outpts;
+    }
+
+    void dump(const char *filename = NULL)
+    {
+        std::ofstream ofile(filename ? filename : "point_cloud.txt");
+        if (ofile.is_open())
+        {
+            ofile << "dim =" << this->dimension << std::endl;
+            ofile << "np = " << this->num_points << std::endl;
+            for (size_t i = 0; i < this->num_points; i++)
+            {
+                for (int d = 0; d < this->dimension; d++)
+                    ofile << pts[d][i] << " ";
+                ofile << std::endl;
+            }
+            ofile.close();
+        }
     }
 };
 
@@ -148,6 +172,7 @@ template <class T> class MatGen
 template <typename T> void generate1DGrid(PointCloud<T> &pt_cloud, int grid_x, T min_x, T max_x)
 {
     T hx = (max_x - min_x) / (grid_x - 1);
+    pt_cloud.resize(1, grid_x);
     for (int i = 0; i < grid_x; i++)
         pt_cloud.pts[0][i] = min_x + i * hx;
 }
@@ -157,6 +182,7 @@ void generate2DGrid(PointCloud<T> &pt_cloud, int grid_x, int grid_y, T min_x, T 
 {
     T hx = (max_x - min_x) / (grid_x - 1);
     T hy = (max_y - min_y) / (grid_y - 1);
+    pt_cloud.resize(2, grid_x * grid_y);
 
     for (size_t i = 0; i < (size_t)grid_x; i++)
     {
@@ -176,6 +202,7 @@ void generate3DGrid(PointCloud<T> &pt_cloud, int grid_x, int grid_y, int grid_z,
     T hy = (max_y - min_y) / (grid_y - 1);
     T hz = (max_z - min_z) / (grid_z - 1);
 
+    pt_cloud.resize(3, grid_x * grid_y * grid_z);
     size_t pt_index = 0;
 
     for (size_t i = 0; i < (size_t)grid_x; i++)
@@ -194,7 +221,8 @@ void generate3DGrid(PointCloud<T> &pt_cloud, int grid_x, int grid_y, int grid_z,
     }
 }
 
-template <typename T> void generateRandomSphereSurface(PointCloud<T> &pt_cloud, int num_pts, T r, unsigned int seed)
+template <typename T>
+void generateRandomSphereSurface(PointCloud<T> &pt_cloud, int num_pts, T r = 1.0, unsigned int seed = 1234)
 {
     thrust::minstd_rand seed_rng(seed);
     thrust::uniform_int_distribution<unsigned int> seed_dist;
@@ -205,6 +233,7 @@ template <typename T> void generateRandomSphereSurface(PointCloud<T> &pt_cloud, 
     thrust::minstd_rand z_rng(seed_z), phi_rng(seed_phi);
     thrust::uniform_real_distribution<T> z_dist(-r, r), phi_dist(0, 2 * M_PI);
 
+    pt_cloud.resize(3, num_pts);
     for (int i = 0; i < num_pts; i++)
     {
         T z = z_dist(z_rng), phi = phi_dist(phi_rng);
@@ -230,6 +259,7 @@ template <typename T> void generateRandomSphere(PointCloud<T> &pt_cloud, int num
     thrust::minstd_rand v_rng(seed_v), theta_rng(seed_theta), r_rng(seed_r);
     thrust::uniform_real_distribution<T> v_dist(0, 1), theta_dist(0, 2 * M_PI), r_dist(0, 1);
 
+    pt_cloud.resize(3, num_pts);
     for (int i = 0; i < num_pts; i++)
     {
         T v = v_dist(v_rng), theta = theta_dist(theta_rng), r2 = r_dist(r_rng);

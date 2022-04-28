@@ -9,7 +9,17 @@ template <class T> class PointCloud : public H2OpusDataSet<T>
     size_t num_points;
     std::vector<std::vector<T>> pts;
 
+    PointCloud()
+    {
+        this->dimension = 0;
+        this->num_points = 0;
+    }
     PointCloud(int dim, size_t num_pts)
+    {
+        resize(dim, num_pts);
+    }
+
+    void resize(int dim, size_t num_pts)
     {
         this->dimension = dim;
         this->num_points = num_pts;

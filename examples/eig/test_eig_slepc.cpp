@@ -46,7 +46,7 @@ int main(int argc, char **argv)
     ierr = PetscLogStageRegister("Solve", &sstage);CHKERRQ(ierr);
 
     // Geometry
-    PointCloud<H2Opus_Real> pt_cloud(dim, grid_x * grid_y * (dim == 3 ? grid_z : 1));
+    PointCloud<H2Opus_Real> pt_cloud;
     if (dim == 3)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
     else

@@ -29,7 +29,7 @@ The INSTALL file in the top level directory has installation instructions. For N
 
 ## Documentation
 
-This release is accompanied by a set of commented examples that serve the purpose of documenting the usage of its various capabilities.
+This release is accompanied by a set of commented examples that serve the purpose of documenting the usage of its various capabilities, including using it from PETSc or SLEPc.
 
 Each example is in its own directory in `examples/`. The examples can be built independently and each also has a short description in a README file.
 

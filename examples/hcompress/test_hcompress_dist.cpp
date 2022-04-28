@@ -95,16 +95,16 @@ int main(int argc, char **argv)
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Geometry generation
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
-        size_t n = grid_x * grid_y * grid_z;
-        if (!proc_rank)
-            printf("N = %d\n", (int)n);
         // Create point cloud
-        int dim = (grid_z == 1 ? 2 : 3);
-        PointCloud<H2Opus_Real> pt_cloud(dim, n);
+        PointCloud<H2Opus_Real> pt_cloud;
         if (grid_z > 1)
             generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
         else
             generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+        int dim = pt_cloud.getDimension();
+        size_t n = pt_cloud.getDataSetSize();
+        if (!proc_rank)
+            printf("N = %d\n", (int)n);
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Matrix construction
