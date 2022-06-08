@@ -67,7 +67,10 @@ template <class T> struct H2OpusBatched<T, H2OPUS_HWTYPE_GPU>
         PerformanceCounter::addOpCount(PerformanceCounter::GEMM, batch_gops);
 #endif
         // See if we should use gemv instead of gemm
-        if (transB == H2Opus_NoTrans && n == 1)
+        int skipgemv = 0;
+        if (transA == KBLAS_Trans)
+            skipgemv = (k / 32 + k % 32) > 16 ? 1 : 0; // XXX missing implementation! WARPSIZE=32
+        if (transB == H2Opus_NoTrans && n == 1 && !skipgemv)
         {
             cudaStream_t cuda_stream = stream->getCudaStream();
             if (transA == KBLAS_Trans)
