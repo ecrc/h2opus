@@ -41,8 +41,10 @@ int main(int argc, char **argv)
     PointCloud<H2Opus_Real> pt_cloud;
     if (grid_z > 1)
         generate3DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, grid_z, 0, 1, 0, 1, 0, 1);
-    else
+    else if (grid_y > 1)
         generate2DGrid<H2Opus_Real>(pt_cloud, grid_x, grid_y, 0, 1, 0, 1);
+    else
+        generate1DGrid<H2Opus_Real>(pt_cloud, grid_x, 0, 1);
     int dim = pt_cloud.getDimension();
     size_t n = pt_cloud.getDataSetSize();
     printf("N = %d\n", (int)n);
