@@ -52,13 +52,15 @@ int reducePerf(double &gflops, MPI_Comm comm)
 }
 
 template <int hw>
-void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_handle, H2Opus_Real trunc_eps,
-             int nruns, bool check_compress_err, std::vector<double> &summary)
+void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_handle, H2Opus_Real trunc_eps, int nv,
+             double *x, double *y, int nruns, bool check_compress_err, std::vector<double> &summary)
 {
     int proc_rank = dist_h2opus_handle->orank;
     MPI_Comm comm = dist_h2opus_handle->ocomm;
     if (!proc_rank)
         printf("\nRunning %s tests\n", hw ? "GPU" : "CPU");
+
+    int nl = hmatrix.basis_tree.basis_branch.index_map.size();
 
     // Compression uses an absolute norm, so we first approximate the norm of the matrix
     dist_h2opus_handle->setRandSeed(dist_h2opus_handle->rank, H2OPUS_HWTYPE_CPU);
@@ -71,6 +73,7 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
     TDistributedHMatrix<hw> compressedhmatrix(hmatrix);
     distributed_horthog(compressedhmatrix, dist_h2opus_handle);
     distributed_hcompress(compressedhmatrix, trunc_eps * approx_hmatrix_norm, dist_h2opus_handle);
+    distributed_hgemv(1.0, compressedhmatrix, x, nl, 0.0, y, nl, nv, dist_h2opus_handle);
 
     double mem[4];
     mem[0] = compressedhmatrix.getLocalDenseMemoryUsage();
@@ -107,7 +110,8 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
     double upsweep_gops, upsweep_time, upsweep_perf, upsweep_dev;
     double coupling_gops, coupling_time, coupling_perf, coupling_dev;
     double total_gops_o, total_time_o, total_perf_o, total_dev_o;
-    double timer_counter[2] = {0, 0}, run_time;
+    double total_gops_mv, total_time_mv, total_perf_mv, total_dev_mv;
+    double timer_counter[3] = {0, 0, 0}, run_time;
     for (int i = 0; i < nruns; i++)
     {
         // GPU matrices can be copied from host
@@ -126,6 +130,13 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
         Sync(comm, hw);
         run_time += MPI_Wtime();
         timer_counter[1] += run_time;
+
+        run_time = 0;
+        run_time -= MPI_Wtime();
+        distributed_hgemv(1.0, compressedhmatrix, x, nl, 0.0, y, nl, nv, dist_h2opus_handle);
+        Sync(comm, hw);
+        run_time += MPI_Wtime();
+        timer_counter[2] += run_time;
     }
 
     HLibProfile::getPhasePerformance(HLibProfile::HORTHOG_BASIS_LEAVES, leaf_gops, leaf_time, leaf_perf, leaf_dev);
@@ -141,6 +152,7 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
     HLibProfile::getPhasePerformance(HLibProfile::HCOMPRESS_PROJECTION, project_gops, project_time, project_perf,
                                      project_dev);
     HLibProfile::getHcompressPerf(total_gops, total_time, total_perf, total_dev);
+    HLibProfile::getHgemvPerf(total_gops_mv, total_time_mv, total_perf_mv, total_dev_mv);
 
     // Average local performances
     reducePerf(leaf_perf, leaf_time, comm);
@@ -151,8 +163,10 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
     reducePerf(trunc_perf, trunc_time, comm);
     reducePerf(project_perf, project_time, comm);
     reducePerf(total_perf, total_time, comm);
+    reducePerf(total_perf_mv, total_time_mv, comm);
     reducePerf(total_gops_o, comm);
     reducePerf(total_gops, comm);
+    reducePerf(total_gops_mv, comm);
     reducePerf(leaf_gops, comm);
     reducePerf(upsweep_gops, comm);
     reducePerf(coupling_gops, comm);
@@ -179,6 +193,8 @@ void RunPerf(DistributedHMatrix &hmatrix, distributedH2OpusHandle_t dist_h2opus_
                timer_counter[0] / nruns, total_time_o, total_perf_o, total_gops_o);
         printf("  Total compression       time: %.5f s, log time %.5f at %.2f GFLOP/s, (GFLOPs log %g)\n",
                timer_counter[1] / nruns, total_time, total_perf, total_gops);
+        printf("  Total matvec            time: %.5f s, log time %.5f at %.2f GFLOP/s, (GFLOPs log %g)\n",
+               timer_counter[2] / nruns, total_time_mv, total_perf_mv, total_gops_mv);
     }
 
     summary.push_back(timer_counter[0] / nruns);
@@ -213,6 +229,7 @@ int main(int argc, char **argv)
     H2Opus_Real trunc_eps =
         arg_parser.option<H2Opus_Real>("te", "trunc_eps", "Relative truncation error threshold", 1e-4);
     int nruns = arg_parser.option<int>("n", "nruns", "Number of runs to perform", 10);
+    int num_vectors = arg_parser.option<int>("nv", "num_vectors", "Number of vectors for matrix multiply", 1);
     int dim = arg_parser.option<int>("dim", "dim", "The geometrical dimension", 2);
     bool check_compress_err = arg_parser.flag("c", "check_approx_err", "Check the compression error", false);
     bool summary = arg_parser.flag("summary", "summary", "Print brief summary", false);
@@ -293,10 +310,16 @@ int main(int argc, char **argv)
     }
 
     // Run performance tests
+    int nl = hmatrix.basis_tree.basis_branch.index_map.size();
+    thrust::host_vector<H2Opus_Real> y(nl * num_vectors, 0), x(nl * num_vectors);
+    randomData(vec_ptr(x), x.size(), 1234);
     std::vector<double> summaryv;
-    RunPerf<H2OPUS_HWTYPE_CPU>(hmatrix, dist_h2opus_handle, trunc_eps, nruns, check_compress_err, summaryv);
+    RunPerf<H2OPUS_HWTYPE_CPU>(hmatrix, dist_h2opus_handle, trunc_eps, num_vectors, vec_ptr(x), vec_ptr(y), nruns,
+                               check_compress_err, summaryv);
 #ifdef H2OPUS_USE_GPU
-    RunPerf<H2OPUS_HWTYPE_GPU>(hmatrix, dist_h2opus_handle, trunc_eps, nruns, check_compress_err, summaryv);
+    thrust::device_vector<H2Opus_Real> y_gpu = y, x_gpu = x;
+    RunPerf<H2OPUS_HWTYPE_GPU>(hmatrix, dist_h2opus_handle, trunc_eps, num_vectors, vec_ptr(x_gpu), vec_ptr(y_gpu),
+                               nruns, check_compress_err, summaryv);
 #else
     for (int i = 0; i < 9; i++)
         summaryv.push_back(0);

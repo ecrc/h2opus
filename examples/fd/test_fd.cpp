@@ -9,10 +9,12 @@
 #define DEFAULT_ETA 1.0
 
 template <int hw>
-void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_eps, int nruns, bool check_compress_err,
-             std::vector<double> &summary)
+void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_eps, int nv, double *x, double *y,
+             int nruns, bool check_compress_err, std::vector<double> &summary)
 {
     printf("\nRunning %s tests\n", hw ? "GPU" : "CPU");
+
+    int n = hmatrix.n;
 
     // Compression uses an absolute norm, so we first approximate the norm of the matrix
     h2opus_handle->setRandSeed(123456, H2OPUS_HWTYPE_CPU);
@@ -29,6 +31,7 @@ void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_e
     THMatrix<hw> compressedhmatrix(hmatrix);
     horthog(compressedhmatrix, h2opus_handle);
     hcompress(compressedhmatrix, trunc_eps * approx_hmatrix_norm, h2opus_handle);
+    hgemv(H2Opus_NoTrans, 1.0, compressedhmatrix, x, n, 0.0, y, n, nv, h2opus_handle);
     printf("  Hmatrix memory usage after compression: %g (dense) %g (low rank) %g GB (total)\n",
            compressedhmatrix.getDenseMemoryUsage(), compressedhmatrix.getLowRankMemoryUsage(),
            compressedhmatrix.getDenseMemoryUsage() + compressedhmatrix.getLowRankMemoryUsage());
@@ -52,6 +55,7 @@ void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_e
     double upsweep_gops, upsweep_time, upsweep_perf, upsweep_dev;
     double coupling_gops, coupling_time, coupling_perf, coupling_dev;
     double total_gops_o, total_time_o, total_perf_o, total_dev_o;
+    double total_gops_mv, total_time_mv, total_perf_mv, total_dev_mv;
 
     for (int i = 0; i < nruns; i++)
     {
@@ -59,8 +63,10 @@ void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_e
         compressedhmatrix = hmatrix;
         horthog(compressedhmatrix, h2opus_handle);
         hcompress(compressedhmatrix, trunc_eps * approx_hmatrix_norm, h2opus_handle);
+        hgemv(H2Opus_NoTrans, 1.0, compressedhmatrix, x, n, 0.0, y, n, nv, h2opus_handle);
     }
 
+    HLibProfile::getHgemvPerf(total_gops_mv, total_time_mv, total_perf_mv, total_dev_mv);
     HLibProfile::getPhasePerformance(HLibProfile::HORTHOG_BASIS_LEAVES, leaf_gops, leaf_time, leaf_perf, leaf_dev);
     HLibProfile::getPhasePerformance(HLibProfile::HORTHOG_UPSWEEP, upsweep_gops, upsweep_time, upsweep_perf,
                                      upsweep_dev);
@@ -92,6 +98,8 @@ void RunPerf(HMatrix &hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_e
            total_gops_o);
     printf("  Total compression       time: %.5f s at %.2f GFLOP/s (GFLOPs log %g)\n", total_time, total_perf,
            total_gops);
+    printf("  Total matvec            time: %.5f s at %.2f GFLOP/s (GFLOPs log %g)\n", total_time_mv, total_perf_mv,
+           total_gops_mv);
 
     summary.push_back(total_time_o);
     summary.push_back(total_gops_o);
@@ -120,7 +128,7 @@ int main(int argc, char **argv)
     int cheb_grid_pts = arg_parser.option<int>(
         "k", "cheb_grid_pts", "Number of grid points in each dimension for Chebyshev interpolation (rank = k^d)", 8);
     H2Opus_Real eta = arg_parser.option<H2Opus_Real>("e", "eta", "Admissibility parameter eta", DEFAULT_ETA);
-    int num_vectors = arg_parser.option<int>("nv", "num_vectors", "Number of vectors the matrix multiplies", 1);
+    int num_vectors = arg_parser.option<int>("nv", "num_vectors", "Number of vectors for matrix multiply", 1);
     H2Opus_Real trunc_eps =
         arg_parser.option<H2Opus_Real>("te", "trunc_eps", "Relative truncation error threshold", 1e-4);
     int nruns = arg_parser.option<int>("n", "nruns", "Number of runs to perform", 10);
@@ -198,9 +206,13 @@ int main(int argc, char **argv)
 
     // Run performance tests
     std::vector<double> summaryv;
-    RunPerf<H2OPUS_HWTYPE_CPU>(hmatrix, h2opus_handle, trunc_eps, nruns, check_compress_err, summaryv);
+    RunPerf<H2OPUS_HWTYPE_CPU>(hmatrix, h2opus_handle, trunc_eps, num_vectors, vec_ptr(x), vec_ptr(y), nruns,
+                               check_compress_err, summaryv);
 #ifdef H2OPUS_USE_GPU
-    RunPerf<H2OPUS_HWTYPE_GPU>(hmatrix, h2opus_handle, trunc_eps, nruns, check_compress_err, summaryv);
+    thrust::device_vector<H2Opus_Real> gpu_x = x, gpu_y;
+    gpu_y.resize(n * num_vectors);
+    RunPerf<H2OPUS_HWTYPE_GPU>(hmatrix, h2opus_handle, trunc_eps, num_vectors, vec_ptr(gpu_x), vec_ptr(gpu_y), nruns,
+                               check_compress_err, summaryv);
 #else
     for (int i = 0; i < 9; i++)
         summaryv.push_back(0);
