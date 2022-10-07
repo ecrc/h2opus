@@ -2,6 +2,7 @@
 #include <h2opus.h>
 #include "../common/example_problem.h"
 
+#if defined(PETSC_HAVE_H2OPUS)
 #define DEFAULT_ETA 1.0
 
 // PETSc entry point to functor evaluation
@@ -27,7 +28,7 @@ int main(int argc, char **argv)
     PetscReal eta = DEFAULT_ETA;
     PetscBool native = PETSC_TRUE;
     PetscBool summary = PETSC_FALSE;
-    ierr = PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");CHKERRQ(ierr);
+    PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");
     ierr = PetscOptionsRangeInt("-dim", "The geometrical dimension", __FILE__, dim, &dim, NULL,1,3);CHKERRQ(ierr);
     ierr = PetscOptionsInt("-gx", "Grid points in the X direction", __FILE__, grid_x, &grid_x, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsInt("-gy", "Grid points in the Y direction", __FILE__, grid_y, &grid_y, NULL);CHKERRQ(ierr);
@@ -38,7 +39,7 @@ int main(int argc, char **argv)
     ierr = PetscOptionsReal("-eta", "Admissibility parameter eta", __FILE__, eta, &eta, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-native", "Perform solve in native mode", __FILE__, native, &native, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-summary", "Report summary", __FILE__, summary, &summary, NULL);CHKERRQ(ierr);
-    ierr = PetscOptionsEnd();CHKERRQ(ierr);
+    PetscOptionsEnd();
 
     // Profiling support
     PetscLogStage astage, sstage;
@@ -98,3 +99,6 @@ int main(int argc, char **argv)
     ierr = SlepcFinalize();
     return ierr;
 }
+#else
+#error "This example requires PETSc compiled with H2OPUS support. Reconfigure PETSc with --download-h2opus or --with-h2opus-lib=... --with-h2opus-include=..."
+#endif
