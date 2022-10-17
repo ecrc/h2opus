@@ -25,17 +25,17 @@ Please use the issue tracker to request new features.
 
 ## Installation
 
-The INSTALL file in the top level directory has installation instructions. For NVIDIA GPU execution, the library has MAGMA as an external dependency. Lower level batched linear algebra routines of H2Opus are packaged seperately in the KBLAS library, which should also be installed. For CPU-only execution, the Thrust library should be installed. The library needs to be linked against BLAS and LAPACK, and can use special libraries if available, including MKL, ESSL, and AOCL libraries specialized for AMD CPUs. The library can be also compiled for the NEC-SX Vector Engine. Additional information can be found in the various make.inc files provided.
+The INSTALL file in the top level directory has installation instructions. For NVIDIA GPU execution, the library has MAGMA as an external dependency. Lower level batched linear algebra routines of H2Opus are packaged seperately in the KBLAS library, which should also be installed. For CPU-only execution, the Thrust library should be installed. The library needs to be linked against BLAS and LAPACK, and can use special libraries if available, including MKL, ESSL, and AOCL libraries specialized for AMD CPUs. The library can be also compiled for the NEC-SX Vector Engine. Additional information can be found in the various configuration files provided in [config](config/).
 
 ## Documentation
 
-This release is accompanied by a set of commented examples that serve the purpose of documenting the usage of its various capabilities, including using it from PETSc or SLEPc.
+This software is accompanied by a set of commented examples that serve the purpose of documenting the usage of its various capabilities, including using it from [PETSc](https://petsc.org/) or [SLEPc](https://slepc.upv.es/).
 
-Each example is in its own directory in `examples/`. The examples can be built independently and each also has a short description in a README file.
+Each example is in its own directory in [examples](examples/) and it can be built independently.
 
 ## Related Publications
 
-1. Stefano Zampini, Wajih Boukaram, George Turkiyyah, David Keyes, H2Opus: A distributed-memory multi-GPU software package for non-local operators. https://arxiv.org/abs/XXXX (2021)
+1. Stefano Zampini, Wajih Boukaram, George Turkiyyah, David Keyes, H2Opus: A distributed-memory multi-GPU software package for non-local operators. *Advances in Computational Mathematics*, 48, 31 (2022)
 
 2. Wajih Boukaram, Stefano Zampini, George Turkiyyah, David Keyes, H2OPUS-TLR: High Performance Tile Low Rank Symmetric Factorizations using Adaptive Randomized Approximation. https://arxiv.org/abs/2108.11932 (2021)
 
