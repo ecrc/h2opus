@@ -3,6 +3,7 @@
 #include "spatial_statistics.h"
 #include "../common/example_problem.h"
 
+#if defined(PETSC_HAVE_H2OPUS)
 #define DEFAULT_ETA 1.0
 
 // PETSc entry point to functor evaluation
@@ -31,7 +32,7 @@ int main(int argc, char **argv)
     PetscBool forcecpu = PETSC_FALSE;
     PetscBool native = PETSC_TRUE;
     PetscBool summary = PETSC_TRUE;
-    ierr = PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");CHKERRQ(ierr);
+    PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");
     ierr = PetscOptionsInt("-n", "Number of random points", __FILE__, num_points, &num_points, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-dump_points", "Dump points", __FILE__, dump_points, &dump_points, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsReal("-phi", "Phi in kernel", __FILE__, phi, &phi, NULL);CHKERRQ(ierr);
@@ -44,7 +45,7 @@ int main(int argc, char **argv)
     ierr = PetscOptionsBool("-native", "Perform solve in native mode", __FILE__, native, &native, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-summary", "Report summary", __FILE__, summary, &summary, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-forcecpu", "Force computation to run on the CPU", __FILE__, forcecpu, &forcecpu, NULL);CHKERRQ(ierr);
-    ierr = PetscOptionsEnd();CHKERRQ(ierr);
+    PetscOptionsEnd();
 
     // Profiling support
     PetscLogStage astage, cstage, pstage, sstage;
@@ -136,7 +137,7 @@ int main(int argc, char **argv)
       PetscMPIInt size;
       ierr = MPI_Comm_size(PETSC_COMM_WORLD,&size);CHKERRMPI(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD,"========================================= SUMMARY =========================================\n");CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD,"%d\t%ld\t%1.6g\t%1.6g\t%1.6g\t%1.6g\t%D\n",size,n,stime[0],stime[1],stime[2],stime[3],its);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD,"%d\t%ld\t%1.6g\t%1.6g\t%1.6g\t%1.6g\t%d\n",size,n,stime[0],stime[1],stime[2],stime[3],(int)its);CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD,"===========================================================================================\n");CHKERRQ(ierr);
     }
 
@@ -148,3 +149,6 @@ int main(int argc, char **argv)
     ierr = PetscFinalize();
     return ierr;
 }
+#else
+#error "This example requires PETSc compiled with H2OPUS support. Reconfigure PETSc with --download-h2opus or --with-h2opus-lib=... --with-h2opus-include=..."
+#endif

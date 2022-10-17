@@ -22,6 +22,29 @@ void test_construction(HMatrixSampler *sampler, THMatrix<hw> &hmatrix, int max_s
            approx_construnction_error);
 }
 
+template <int hw>
+void RunTest(THMatrix<hw> &hmatrix, THMatrix<hw> &zero_hmatrix, h2opusHandle_t h2opus_handle, H2Opus_Real trunc_eps,
+             int max_samples)
+{
+    THMatrix<hw> constructed_hmatrix = zero_hmatrix;
+
+    printf("\n-----------------------------------------------\n");
+    printf("%s results\n\n", hw == H2OPUS_HWTYPE_GPU ? "GPU matrix" : "CPU matrix");
+
+    // Reconstruction matrix via hara
+    SimpleHMatrixSampler<hw> reconstruct_sampler(hmatrix, h2opus_handle);
+    test_construction<hw>(&reconstruct_sampler, constructed_hmatrix, max_samples, trunc_eps, "Matrix", h2opus_handle);
+
+    // Clear out matrix data
+    constructed_hmatrix = zero_hmatrix;
+
+    // Squaring
+    SquareSampler<hw> square_sampler(reconstruct_sampler, h2opus_handle);
+    test_construction<hw>(&square_sampler, constructed_hmatrix, max_samples, trunc_eps, "Square", h2opus_handle);
+
+    return;
+}
+
 int main(int argc, char **argv)
 {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -41,10 +64,8 @@ int main(int argc, char **argv)
     H2Opus_Real eta = arg_parser.option<H2Opus_Real>("e", "eta", "Admissibility parameter eta", DEFAULT_ETA);
     H2Opus_Real trunc_eps = arg_parser.option<H2Opus_Real>(
         "te", "trunc_eps", "Relative truncation error threshold for the construction", 1e-4);
-    int rank = arg_parser.option<int>("r", "rank", "Number of columns for the low rank update", 0);
     bool output_eps = arg_parser.flag("o", "output_eps", "Output structure of the matrix as an eps file", false);
     bool dump = arg_parser.flag("d", "dump", "Dump hmatrix structure", false);
-    bool print_results = arg_parser.flag("p", "print_results", "Print input/output vectors to stdout", false);
     bool print_help = arg_parser.flag("h", "help", "This message", false);
 
     if (!arg_parser.valid() || print_help)
@@ -108,97 +129,12 @@ int main(int argc, char **argv)
     h2opusHandle_t h2opus_handle;
     h2opusCreateHandle(&h2opus_handle);
 
-    // Reconstuct the matrix and its square
-    SimpleHMatrixSampler<H2OPUS_HWTYPE_CPU> cpu_reconstruct_sampler(hmatrix, h2opus_handle);
-    SimpleHMatrixSampler<H2OPUS_HWTYPE_CPU> cpu_constructed_sampler(constructed_hmatrix, h2opus_handle);
-    SquareSampler<H2OPUS_HWTYPE_CPU> cpu_square_sampler(cpu_reconstruct_sampler, h2opus_handle);
-
-    // Reconstruction
-    test_construction<H2OPUS_HWTYPE_CPU>(&cpu_reconstruct_sampler, constructed_hmatrix, max_samples, trunc_eps,
-                                         "Matrix", h2opus_handle);
-    DiffSampler<H2OPUS_HWTYPE_CPU> cpu_diff_sampler(cpu_reconstruct_sampler, cpu_constructed_sampler, h2opus_handle);
-    printf("CPU diff sampler error = %e\n",
-           sampler_norm<H2Opus_Real, H2OPUS_HWTYPE_CPU>(&cpu_diff_sampler, n, 40, h2opus_handle));
-
-    // Dump hmatrix structure
-    if (dump)
-    {
-        printf("Constructed HMatrix\n");
-        dumpHMatrix(constructed_hmatrix, 2, NULL);
-    }
-
-    if (print_results)
-    {
-        if (!dump)
-            dumpHMatrix(constructed_hmatrix, 2, NULL);
-
-        H2Opus_Real *dmat = (H2Opus_Real *)malloc(n * n * sizeof(H2Opus_Real));
-        expandHmatrix(constructed_hmatrix, dmat);
-        printDenseMatrix(dmat, n, n, n, 2, NULL);
-        free(dmat);
-    }
-
-    // Clear out matrix data
-    constructed_hmatrix = zero_hmatrix;
-
-    // Squaring
-    SimpleHMatrixSampler<H2OPUS_HWTYPE_CPU> cpu_squared_sampler(constructed_hmatrix, h2opus_handle);
-    test_construction<H2OPUS_HWTYPE_CPU>(&cpu_square_sampler, constructed_hmatrix, max_samples, trunc_eps, "Square",
-                                         h2opus_handle);
-    DiffSampler<H2OPUS_HWTYPE_CPU> cpu_diff_ssampler(cpu_square_sampler, cpu_squared_sampler, h2opus_handle);
-    printf("CPU diff squared sampler error = %e\n",
-           sampler_norm<H2Opus_Real, H2OPUS_HWTYPE_CPU>(&cpu_diff_ssampler, n, 40, h2opus_handle));
-
-    // Dump hmatrix structure
-    if (dump)
-    {
-        printf("Squared HMatrix\n");
-        dumpHMatrix(constructed_hmatrix, 2, NULL);
-    }
-
-    // Test low-rank update
-    if (rank)
-    {
-        thrust::host_vector<H2Opus_Real> U(n * rank);
-        random_vector<H2Opus_Real, H2OPUS_HWTYPE_CPU>(h2opus_handle, vec_ptr(U), n * rank);
-
-        LowRankSampler<H2OPUS_HWTYPE_CPU> lrsampler(vec_ptr(U), vec_ptr(U), n, rank, h2opus_handle);
-
-        // apply symmetric low-rank update
-        hlru_sym_global(constructed_hmatrix, vec_ptr(U), n, rank, 1.0, h2opus_handle);
-
-        if (dump)
-        {
-            printf("LR update\n");
-            printThrustVector(U);
-            printf("Squared + LR HMatrix\n");
-            dumpHMatrix(constructed_hmatrix, 2, NULL);
-        }
-
-        // Check the difference ((Squared + LR) - LR) - Squared
-        SimpleHMatrixSampler<H2OPUS_HWTYPE_CPU> cpu_sqrlr_sampler(constructed_hmatrix, h2opus_handle);
-        DiffSampler<H2OPUS_HWTYPE_CPU> cpu_diff_sqrlr_lr_sampler(cpu_sqrlr_sampler, lrsampler, h2opus_handle);
-        DiffSampler<H2OPUS_HWTYPE_CPU> cpu_diff_totlr_sampler(cpu_diff_sqrlr_lr_sampler, cpu_square_sampler,
-                                                              h2opus_handle);
-        printf("CPU diff LR error = %e\n",
-               sampler_norm<H2Opus_Real, H2OPUS_HWTYPE_CPU>(&cpu_diff_totlr_sampler, n, 40, h2opus_handle));
-    }
+    /* Run CPU tests */
+    RunTest(hmatrix, zero_hmatrix, h2opus_handle, trunc_eps, max_samples);
 
 #ifdef H2OPUS_USE_GPU
-    HMatrix_GPU gpu_hmatrix = hmatrix, gpu_constructed_hmatrix = zero_hmatrix;
-    ReconstructSampler<H2OPUS_HWTYPE_GPU> gpu_reconstruct_sampler(gpu_hmatrix, h2opus_handle);
-    SquareSampler<H2OPUS_HWTYPE_GPU> gpu_square_sampler(gpu_reconstruct_sampler, h2opus_handle);
-
-    // Reconstruction
-    test_construction<H2OPUS_HWTYPE_GPU>(&gpu_reconstruct_sampler, gpu_constructed_hmatrix, max_samples, trunc_eps,
-                                         "Matrix", h2opus_handle);
-
-    // Clear out matrix data
-    gpu_constructed_hmatrix = zero_hmatrix;
-
-    // Squaring
-    test_construction<H2OPUS_HWTYPE_GPU>(&gpu_square_sampler, gpu_constructed_hmatrix, max_samples, trunc_eps, "Square",
-                                         h2opus_handle);
+    HMatrix_GPU gpu_hmatrix = hmatrix, gpu_zero_hmatrix = zero_hmatrix;
+    RunTest(gpu_hmatrix, gpu_zero_hmatrix, h2opus_handle, trunc_eps, max_samples);
 #endif
 
     h2opusDestroyHandle(h2opus_handle);

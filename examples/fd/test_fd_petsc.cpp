@@ -2,6 +2,7 @@
 #include <h2opus.h>
 #include "fd_core.h"
 
+#if defined(PETSC_HAVE_H2OPUS)
 #define DEFAULT_ETA 1.0
 
 // PETSc entry point to functor evaluation
@@ -124,6 +125,7 @@ static PetscErrorCode BuildD(Mat A, PointCloud<H2Opus_Real>& pt_cloud, FDGen<H2O
 {
     PetscErrorCode ierr;
 
+    PetscFunctionBeginUser;
     // Assemble an H2 matrix on the outer grid
     OuterGrid<H2Opus_Real> *opt_cloud = pt_cloud.ogrid;
     size_t no = opt_cloud->getDataSetSize();
@@ -225,6 +227,7 @@ static PetscErrorCode BuildOperators(Mat A, Mat S, Vec D, Mat *Mn, Mat *Pn)
 {
     PetscErrorCode ierr;
 
+    PetscFunctionBeginUser;
     // The final operator layout will depend on whether or not we flag
     // A to use native ordering outside of this function
     IS indexmap = NULL;
@@ -246,11 +249,13 @@ static PetscErrorCode BuildOperators(Mat A, Mat S, Vec D, Mat *Mn, Mat *Pn)
 
     // Copy S to the GPU if needed
     // If the H2 matrix is bound to the CPU, do not convert to CUSPARSE the S matrix
+#if defined(PETSC_HAVE_CUDA)
     PetscBool cpu;
     ierr = MatBoundToCPU(A,&cpu);CHKERRQ(ierr);
     if (!cpu) {
       ierr = MatConvert(Sp,MATAIJCUSPARSE,MAT_INPLACE_MATRIX,&Sp);CHKERRQ(ierr);
     }
+#endif
 
     // Permute D if needed
     Vec Dp = NULL;
@@ -303,7 +308,7 @@ int main(int argc, char **argv)
     PetscReal eta = DEFAULT_ETA, trunc_eps = 1.e-4;
     PetscBool native = PETSC_FALSE;
     PetscBool summary = PETSC_FALSE;
-    ierr = PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");CHKERRQ(ierr);
+    PetscOptionsBegin(PETSC_COMM_WORLD, "", "FD2D solver", "");
     ierr = PetscOptionsRangeInt("-dim", "The geometrical dimension", __FILE__, dim, &dim, NULL,2,3);CHKERRQ(ierr);
     ierr = PetscOptionsInt("-gx", "Grid points in the X direction", __FILE__, grid_x, &grid_x, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsInt("-m", "Leaf size in the KD-tree", __FILE__, m, &m, NULL);CHKERRQ(ierr);
@@ -313,7 +318,7 @@ int main(int argc, char **argv)
     ierr = PetscOptionsReal("-te", "Relative truncation error threshold", __FILE__, trunc_eps, &trunc_eps, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-native", "Perform solve in native mode", __FILE__, native, &native, NULL);CHKERRQ(ierr);
     ierr = PetscOptionsBool("-summary", "Report summary", __FILE__, summary, &summary, NULL);CHKERRQ(ierr);
-    ierr = PetscOptionsEnd();CHKERRQ(ierr);
+    PetscOptionsEnd();
 
     // Profiling support
     PetscLogStage astage, cstage, pstage, sstage;
@@ -401,16 +406,12 @@ int main(int argc, char **argv)
       x = xn;
     }
 
-    PetscScalar v;
-    ierr = VecMax(x,NULL,&v);CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "umax: %1.16g\n", v,v);CHKERRQ(ierr);
-
     // Write a brief summary
     if (summary) {
       PetscMPIInt size;
       ierr = MPI_Comm_size(PETSC_COMM_WORLD,&size);CHKERRMPI(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD,"========================================= SUMMARY =========================================\n");CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD,"%d\t%ld\t%1.6g\t%1.6g\t%1.6g\t%D\t%1.16g\n",size,n,stime[0],stime[1],stime[2],its,v);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD,"%d\t%ld\t%1.6g\t%1.6g\t%1.6g\t%d\n",size,n,stime[0],stime[1],stime[2],(int)its);CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD,"===========================================================================================\n");CHKERRQ(ierr);
     }
 
@@ -424,3 +425,6 @@ int main(int argc, char **argv)
     ierr = PetscFinalize();
     return ierr;
 }
+#else
+#error "This example requires PETSc compiled with H2OPUS support. Reconfigure PETSc with --download-h2opus or --with-h2opus-lib=... --with-h2opus-include=..."
+#endif
