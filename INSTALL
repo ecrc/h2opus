@@ -14,7 +14,7 @@ CUDA version 11 introduces some changes and may not work directly out of the box
 
 2. Install the H2Opus library.
     * create a make.inc file to customize the build of the library. Edit it to specify whether a GPU is available (H2OPUS_USE_GPU=1), whether to use MKL (H2OPUS_USE_MKL=1), and whether to use single precision (H2OPUS_USE_SINGLE_PRECISION=1, default is double precision). The file should also be edited to specify the install paths of the dependencies above and the compute capabilities of the target GPU.
-    * examples can be found in make.inc.cpu (CPU build) or make.inc.gpu (CPU-GPU build). These files have been tested with GNU and Intel.
+    * examples can be found in the config folder, for example make.inc.cpu (CPU build) or make.inc.gpu (CPU-GPU build). These files have been tested with GNU and Intel.
     * type 'make' to configure, compile and build the library
     * type 'make check' to verify a correct build and compile all the examples
     * type 'make distclean' before trying a different configuration

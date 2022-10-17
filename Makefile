@@ -15,7 +15,7 @@ all:
 
 # Any change in make.inc or lib/h2opus/make.inc will trigger reconfiguration
 $(H2OPUS_DIR)/make.inc:
-	@cp make.inc.cpu make.inc
+	@cp config/make.inc.cpu make.inc
 
 $(LIBH2OPUSVARS): $(H2OPUS_DIR)/make.inc | $(H2OPUS_DIR)/lib/h2opus/.keep
 	@printf "include $(H2OPUS_DIR)/make.inc" > $@
@@ -163,6 +163,7 @@ config-clean : clean
 .PHONY:  config config-clean clean
 
 distclean: config-clean
+	@rm -f make.inc
 
 ############################################################################
 # Main library compilation
