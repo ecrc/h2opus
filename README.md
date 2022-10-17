@@ -25,7 +25,7 @@ Please use the issue tracker to request new features.
 
 ## Installation
 
-The INSTALL file in the top level directory has installation instructions. For NVIDIA GPU execution, the library has MAGMA as an external dependency. Lower level batched linear algebra routines of H2Opus are packaged seperately in the KBLAS library, which should also be installed. For CPU-only execution, the Thrust library should be installed. The library needs to be linked against BLAS and LAPACK, and can use special libraries if available, including MKL, ESSL, and AOCL libraries specialized for AMD CPUs. The library can be also compiled for the NEC-SX Vector Engine. Additional information can be found in the various configuration files provided in [config](config/).
+The INSTALL file in the top level directory has installation instructions. For NVIDIA GPU execution, the library has [MAGMA](https://icl.utk.edu/magma/) as an external dependency. Lower level batched linear algebra routines of H2Opus are packaged separately in the [KBLAS](https://github.com/ecrc/kblas) library, which should also be installed. For CPU-only execution, the [Thrust library](https://github.com/NVIDIA/thrust) should be installed. The library needs to be linked against BLAS and LAPACK, and can use special libraries if available, including MKL, ESSL, and AOCL libraries specialized for AMD CPUs. The library can be also compiled for the NEC-SX Vector Engine. Additional information can be found in the various configuration files provided in [config](config/).
 
 ## Documentation
 
